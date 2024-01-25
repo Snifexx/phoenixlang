@@ -1,10 +1,10 @@
+#![allow(warnings)]
 use core::panic;
 use std::path::PathBuf;
 use std::fs;
 
 use clap::{Parser, CommandFactory, error::ErrorKind};
 use cli::PhoenixCli;
-use phoenixlang::test;
 mod cli;
 
 fn main() {

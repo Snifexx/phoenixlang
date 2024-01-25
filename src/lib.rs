@@ -1,11 +1,8 @@
 #![allow(warnings)]
-use core::ops::Deref;
-use std::{rc::Rc, borrow::Borrow};
 
 use compiler::chunk::Chunk;
 use debug::debug_chunk;
 use flamebytecode::FBOpCode;
-use vm::value::Value;
 use compiler::chunk::Const;
 
 use crate::flamebytecode::FBOpCode::*;
