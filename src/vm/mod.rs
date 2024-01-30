@@ -13,7 +13,6 @@ pub struct Vm {
     pub chunk: Chunk,
     pub pc: u64,
     pub stack: Stack,
-    pub line: u16,
 }
 
 impl Vm {
@@ -23,7 +22,7 @@ impl Vm {
             let size = FBOpCode::size()[byte as usize] as usize;
             let exit_code = run(&mut self, size);
             if let Some(code) = exit_code { return code }
-            if debug_flag { debug(self.line, self.pc, &self.chunk.code[self.pc as usize..self.pc as usize + size]); }
+            if debug_flag { debug(self.pc, &self.chunk.code[self.pc as usize..self.pc as usize + size]); }
         }
     }
 }

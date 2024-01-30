@@ -4,19 +4,25 @@ use std::ops::RangeBounds;
 use TokenType::*;
 use rustc_hash::FxHashMap;
 
-use super::Scanner;
+use crate::compiler::scanner::Scanner;
 
+#[derive(Debug)]
 pub struct Token {
     pub ty: TokenType,
     pub lexeme: Option<String>,
     pub pos: (u16, u16)
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TokenType {
     LParen = 0, RParen, LBrace, RBrace, LSquare, RSquare,
     Comma, Dot, SemiColon,
-    Plus, Minus, Arrow, Star, Slash,
+
+    Plus, PlusEq,
+    Minus, MinusEq, Arrow,
+    Star, StarEq, 
+    Slash, SlashEq,
+
     Ampersand, Caret, Bar, Pipe, Hash,
     IndentUp, IndentDown,
 
@@ -28,8 +34,8 @@ pub enum TokenType {
     Identifier, String, Int, Dec,
 
     And, Alias, As, Else, False, Fn, If, Infix, Let, Loop,
-    Macro, Mod, Mut, Or, Prefix, Print, Pub, Return, Selff,
-    Struct, Super, Suffix, Trait, True, While,
+    Macro, Mod, Mut, Not, Or, Prefix, Print, Pub, Return, Selff,
+    Struct, Super, Suffix, Trait, True, While, Xor,
     Eof,
 }
 

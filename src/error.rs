@@ -19,5 +19,5 @@ impl Display for PhoenixError {
 
 #[derive(Debug)]
 pub enum CompErrID {
-    InvalidChar, UnterminatedComment, UnterminatedString
+    InvalidChar, UnterminatedComment, UnterminatedString, IdentifierTooLong,
 }

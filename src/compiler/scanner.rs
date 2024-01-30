@@ -4,16 +4,13 @@ use std::str::Chars;
 
 use rustc_hash::FxHashMap;
 
-use crate::{utils::{StringExt, OwnedChars}, error::{PhoenixError, CompErrID}};
-
-use self::token::{Token, TokenType::{*, self}};
-
-pub mod token;
+use crate::{utils::{StringExt, OwnedChars}, error::{PhoenixError, CompErrID}, IDENTIFIER_MAX_LENGTH};
+use crate::compiler::token::{Token, TokenType::{*, self}};
 
 pub struct Scanner {
     src: OwnedChars, 
     peek: Option<char>, peek_more: Option<char>,
-    row: u16, col: u16, indent: u16,
+    pub row: u16, pub col: u16, indent: u16,
 }
 
 
@@ -34,10 +31,9 @@ impl Scanner {
 
     pub fn scan(mut self) -> Result<Vec<Token>, PhoenixError> {
         let keywords = FxHashMap::from_iter([ ("and", And), ("alias", Alias), ("as", As), ("else", Else), ("false", False), ("fn", Fn), ("if", If),
-                                            ("infix", Infix), ("let", Let), ("loop", Loop), ("macro", Macro), ("mod", Mod), ("mut", Mut),
+                                            ("infix", Infix), ("let", Let), ("loop", Loop), ("not", Not), ("macro", Macro), ("mod", Mod), ("mut", Mut),
                                             ("or", Or), ("prefix", Prefix), ("print", Print), ("pub", Pub), ("return", Return), ("self", Selff), 
-                                            ("struct", Struct), ("super", Super), ("suffix", Suffix), ("trait", Trait), ("true", True), ("while", While),
-                                            ]);
+                                            ("struct", Struct), ("super", Super), ("suffix", Suffix), ("trait", Trait), ("true", True), ("while", While), ("xor", Xor) ]);
         let mut res = vec![];
         let mut c_ = None; let mut c = '0';
 
@@ -84,13 +80,13 @@ impl Scanner {
                 ']' => res.push(Token::make(&self, RSquare, None)),
                 ';' => res.push(Token::make(&self, SemiColon, None)),
                 ',' => res.push(Token::make(&self, Comma, None)),
-                '#' => res.push(Token::make(&self, Star, None)),
+                '#' => res.push(Token::make(&self, Hash, None)),
 
                 '.' => res.push(Token::make(&self, Dot, None)),
                 '+' => res.push(Token::make(&self, Plus, None)),
-                '-' => res.push(self.make_double('>', Minus, Arrow)),
-                '/' => res.push(Token::make(&self, Slash, None)),
-                '*' => res.push(Token::make(&self, Star, None)),
+                '-' => res.push(Token::make(&self, match self.peek { Some('=') => MinusEq, Some('>') => Arrow, _ => Minus }, None)),
+                '/' => res.push(self.make_double('=', Slash, SlashEq)),
+                '*' => res.push(self.make_double('=', Star, StarEq)),
 
                 '&' => res.push(Token::make(&self, Ampersand, None)),
                 '^' => res.push(Token::make(&self, Caret, None)),
@@ -103,6 +99,7 @@ impl Scanner {
 
                 '"' => self.string(&mut res)?,
                 c if c.is_ascii_digit() => self.number(&mut res, c),
+                c if c.is_ascii_alphabetic() || c == '_' => self.identifier(&mut res, c, &keywords)?,
                 _ => return Err(PhoenixError::Compile { id: CompErrID::InvalidChar, row: self.row, col: self.col, msg: format!("Invalid character {c} at {}::{}", self.row, self.col) })
             }
         }
@@ -114,8 +111,14 @@ impl Scanner {
         macro_rules! next_string { () => { self.next_err(CompErrID::UnterminatedString, format!("Missing closing \" for string started at {}::{}", self.row, self.col)) };}
         let mut str = String::new();
         loop {
-            let c = next_string!()?;
+            let mut c = next_string!()?;
             if c == '"' { break }
+            match c {
+                '"' => break,
+                '\\' => c = match next_string!()? { 'n' => '\n', 'r' => '\r', 't' => '\t', '0' => '\0', p => p },
+                _ => {}
+            }
+
             str.push(c);
             if c == '\n' { let skip = self.indent as u32 * 4; for _ in 0..skip { next_string!()?;}}
         }
@@ -127,7 +130,7 @@ impl Scanner {
         let mut str = String::from(c);
         let mut dot = false;
         loop {
-            let c = match self.peek { Some('\0') | None => return, Some(c) => c, };
+            let c = match self.peek { Some('\0') | None => break, Some(c) => c, };
             match &c {
                 '.' => if dot { break; } else { dot = true; }
                 c if c.is_ascii_digit() => {}
@@ -139,9 +142,28 @@ impl Scanner {
         res.push(Token::make(&self, if dot { Int } else { Dec }, Some(str)));
     }
     
-    fn identifier(&mut self, res: &mut Vec<Token>, c: char) {
-        let str = String::from(c);
+    fn identifier(&mut self, res: &mut Vec<Token>, c: char, keywords: &FxHashMap<&'static str, TokenType>) -> Result<(), PhoenixError> {
+        let mut str = String::from(c);
+        let mut can_be_type = true;
+        loop {
+            let c = match self.peek { Some('\0') | None => break, Some(c) => c, };
+            match &c {
+                '?' | '!'  => can_be_type = false,
+                c if c.is_ascii_digit() => can_be_type = false, 
+                '_' => {}
+                c if c.is_ascii_alphabetic() => {}
+                _ => break,
+            }
+
+            if str.len() >= IDENTIFIER_MAX_LENGTH { return Err(PhoenixError::Compile { id: CompErrID::IdentifierTooLong, row: self.row, col: self.col, 
+                    msg: format!("A type or an identifier can have a maximum length of {}", IDENTIFIER_MAX_LENGTH)})}
+            str.push(c);
+            self.next();
+        }
         
+        let is_keyword = if can_be_type { keywords.get(&*str) } else { None };
+        res.push(Token::make(&self, if is_keyword.is_some() { *is_keyword.unwrap() } else { Identifier }, if is_keyword.is_none() { Some(format!("{}{str}", can_be_type as u8)) } else { None }));
+        Ok(())
     }
 }
 

@@ -8,7 +8,6 @@ use cli::PhoenixCli;
 mod cli;
 
 fn main() {
-    //test();
     let cli = PhoenixCli::parse();
     let cmd = PhoenixCli::command();
 

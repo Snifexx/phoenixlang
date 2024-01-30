@@ -8,7 +8,7 @@ pub fn debug_chunk(chunk: &Chunk) {
     for (i, constant) in chunk.consts.as_vm().iter().enumerate() {
         println!("\t[{i:#08X}]   {constant:?},")
     }
-    println!("\n");
+    println!("\n_________________________________________________\n");
 
     chunk.code.chunks(8).enumerate().for_each(|x| {
         print!("\t{:#010X}  |  ", x.0 * 8);
@@ -23,11 +23,10 @@ pub fn debug_chunk(chunk: &Chunk) {
 
 pub fn debug_code(code: &Vec<u8>) {
     let mut i = 0;
-    let mut line = 0;
     while i < code.len() {
         let by = code[i];
         let size = FBOpCode::size()[by as usize];
-        line = debug(line, i as u64, &code[i as usize..i as usize + size as usize]);
+        debug(i as u64, &code[i as usize..i as usize + size as usize]);
         i += size as usize;
     }
 }

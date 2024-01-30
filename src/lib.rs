@@ -14,21 +14,19 @@ mod debug;
 mod utils;
 pub mod error;
 
+const IDENTIFIER_MAX_LENGTH: usize = 32;
 
-pub fn test() {
-    test_vm()
+#[cfg(test)]
+mod test {
+    use std::rc::Rc;
+
+    use rustc_hash::{FxHashMap, FxHashSet};
+
+
+    #[test]
+    pub fn test() {}
 }
 
-fn test_vm() {
-    let mut chunk = Chunk::new();
-
-    chunk.write_const(Const::String("Test String".to_string()));
-    chunk.write_op(FBOpCode::OpLine);
-    chunk.write(&0x7B_u16.to_le_bytes());
-    chunk.write_op(OpTrue);
-
-    debug_chunk(&chunk.build());
-}
 
 pub fn execute(bytes: Vec<u8>) {
 
