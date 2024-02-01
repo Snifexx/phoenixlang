@@ -1,0 +1,60 @@
+import packagename::me.package.Item   // Struct
+
+pub struct MyStruct:
+    i: int
+    u: dec
+
+pub fn main():
+    
+    let i = 1
+    let mut i = "Str" //Shading
+    // Comments
+
+    /*
+        Multiline Comments
+    */
+    
+    macro my_let ->
+        $a $c[];                    // See section Macro Examples
+    -> a: identifier, c: []:
+        let c = expr(c)
+        let i = ident(i)
+
+        `let ~a = ~c ~i`
+
+    if var > 1: true
+    else: false
+
+    let opt: Result<int, str> = "Test" |> Err |> catch
+
+    /*
+        catch will be a std macro that goes something like this:
+
+        macro catch(expr):
+            `match ~expr:
+                Ok(v) => v
+                Err(err) => return Err(err)`
+   */
+
+    loop:
+        break
+        continue
+
+pub infix fun Option<T>::default(val: T) -> T:
+    match self:
+        Some(v) => v
+        None => val
+
+// Some(1) default 3            -> 1 
+// None default 3               -> 3
+
+# inline
+pub MyStruct::test() -> bool:
+    true
+
+pub struct Test + Debug:
+    state: int
+
+fn Test::debug() -> str:
+    self.state.str()
+

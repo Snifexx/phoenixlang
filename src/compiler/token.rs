@@ -16,14 +16,15 @@ pub struct Token {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TokenType {
     LParen = 0, RParen, LBrace, RBrace, LSquare, RSquare,
-    Comma, Dot, SemiColon,
+    Comma, Dot, Colon, SemiColon,
 
     Plus, PlusEq,
     Minus, MinusEq, Arrow,
     Star, StarEq, 
     Slash, SlashEq,
 
-    Ampersand, Caret, Bar, Pipe, Hash,
+    Ampersand, Caret, Bar, Pipe,
+    Hash, Dollar, Tilde, Backtick,
     IndentUp, IndentDown,
 
     Bang, BangEq,
@@ -34,11 +35,12 @@ pub enum TokenType {
     Identifier, String, Int, Dec,
 
     And, Alias, As, Else, False, Fn, If, Infix, Let, Loop,
-    Macro, Mod, Mut, Not, Or, Prefix, Print, Pub, Return, Selff,
-    Struct, Super, Suffix, Trait, True, While, Xor,
+    Macro, Mod, Mut, Not, Or, Print, Pub, Return, Selff,
+
+    Struct, Super, Trait, True, While, Xor,
     Eof,
 }
 
 impl Token {
-    pub fn make(scanner: &Scanner, ty: TokenType, lexeme: Option<String>) -> Token { Token { ty, lexeme: lexeme, pos: (scanner.row, scanner.col) }}
+    pub fn make(scanner: &Scanner, ty: TokenType, lexeme: Option<String>) -> Token { Token { ty, lexeme, pos: (scanner.row, scanner.col) }}
 }

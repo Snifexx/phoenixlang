@@ -3,7 +3,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use self::module::Module;
 
 pub mod chunk;
-mod scanner;
+pub mod scanner;
 mod token;
 mod module;
 

@@ -15,7 +15,7 @@ pub struct Scanner {
 
 
 impl Scanner {
-    pub fn new(src: String) -> Self { let mut iter = src.into_chars(); Self { peek: iter.next(), peek_more: iter.next(), src: iter, row: 0, col: 0, indent: 0, }}
+    pub fn new(src: String) -> Self { let mut iter = src.into_chars(); Self { peek: iter.next(), peek_more: iter.next(), src: iter, row: 1, col: 0, indent: 0, }}
     pub fn next(&mut self) -> Option<char> {
         let ret = self.peek; self.peek = self.peek_more; self.peek_more = self.src.next(); 
         if ret.is_some_and(|x| x == '\n') { self.row += 1; self.col = 0 } else { self.col += 1 } 
@@ -32,8 +32,8 @@ impl Scanner {
     pub fn scan(mut self) -> Result<Vec<Token>, PhoenixError> {
         let keywords = FxHashMap::from_iter([ ("and", And), ("alias", Alias), ("as", As), ("else", Else), ("false", False), ("fn", Fn), ("if", If),
                                             ("infix", Infix), ("let", Let), ("loop", Loop), ("not", Not), ("macro", Macro), ("mod", Mod), ("mut", Mut),
-                                            ("or", Or), ("prefix", Prefix), ("print", Print), ("pub", Pub), ("return", Return), ("self", Selff), 
-                                            ("struct", Struct), ("super", Super), ("suffix", Suffix), ("trait", Trait), ("true", True), ("while", While), ("xor", Xor) ]);
+                                            ("or", Or), ("print", Print), ("pub", Pub), ("return", Return), ("self", Selff), 
+                                            ("struct", Struct), ("super", Super), ("trait", Trait), ("true", True), ("while", While), ("xor", Xor) ]);
         let mut res = vec![];
         let mut c_ = None; let mut c = '0';
 
@@ -78,9 +78,12 @@ impl Scanner {
                 '}' => res.push(Token::make(&self, RBrace, None)),
                 '[' => res.push(Token::make(&self, LSquare, None)),
                 ']' => res.push(Token::make(&self, RSquare, None)),
+                ':' => res.push(Token::make(&self, Colon, None)),
                 ';' => res.push(Token::make(&self, SemiColon, None)),
                 ',' => res.push(Token::make(&self, Comma, None)),
                 '#' => res.push(Token::make(&self, Hash, None)),
+                '$' => res.push(Token::make(&self, Dollar, None)),
+                '~' => res.push(Token::make(&self, Tilde, None)),
 
                 '.' => res.push(Token::make(&self, Dot, None)),
                 '+' => res.push(Token::make(&self, Plus, None)),
@@ -98,6 +101,7 @@ impl Scanner {
                 '<' => res.push(self.make_double('=', Less, LessEq)),
 
                 '"' => self.string(&mut res)?,
+                '`' => res.push(Token::make(&self, Backtick, None)),
                 c if c.is_ascii_digit() => self.number(&mut res, c),
                 c if c.is_ascii_alphabetic() || c == '_' => self.identifier(&mut res, c, &keywords)?,
                 _ => return Err(PhoenixError::Compile { id: CompErrID::InvalidChar, row: self.row, col: self.col, msg: format!("Invalid character {c} at {}::{}", self.row, self.col) })

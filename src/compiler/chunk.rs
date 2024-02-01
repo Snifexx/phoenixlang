@@ -25,7 +25,7 @@ impl Debug for Const { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fm
     match self {
         Const::String(v) => write!(f, "str: '{v}'"),
         Const::Int(v) => write!(f, "int: {v}"),
-        Const::Dec(v) => write!(f, "dec: {}", *v as f64),
+        Const::Dec(v) => write!(f, "dec: {}", f64::from_bits(*v)),
     }}}
 
 impl ConstPool {

@@ -18,10 +18,11 @@ const IDENTIFIER_MAX_LENGTH: usize = 32;
 
 #[cfg(test)]
 mod test {
-    use std::rc::Rc;
+    use std::{rc::Rc, fs};
 
     use rustc_hash::{FxHashMap, FxHashSet};
 
+    use crate::compiler::scanner::Scanner;
 
     #[test]
     pub fn test() {}
