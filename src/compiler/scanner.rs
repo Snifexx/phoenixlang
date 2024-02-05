@@ -16,16 +16,23 @@ pub struct Scanner {
 
 impl Scanner {
     pub fn new(src: String) -> Self { let mut iter = src.into_chars(); Self { peek: iter.next(), peek_more: iter.next(), src: iter, row: 1, col: 0, indent: 0, }}
-    pub fn next(&mut self) -> Option<char> {
+    fn next(&mut self) -> Option<char> {
         let ret = self.peek; self.peek = self.peek_more; self.peek_more = self.src.next(); 
         if ret.is_some_and(|x| x == '\n') { self.row += 1; self.col = 0 } else { self.col += 1 } 
         ret 
     }
-    pub fn make_double(&self, expected: char, single: TokenType, double: TokenType) -> Token { Token::make(&self, if (self.peek.is_some_and(|x| x == expected)) { double } else { single }, None)}
-    pub fn next_err(&mut self, err_id: CompErrID, err_msg: String) -> Result<char, PhoenixError> { 
+    fn make_double(&self, expected: char, single: TokenType, double: TokenType) -> Token { Token::make(&self, if (self.peek.is_some_and(|x| x == expected)) { double } else { single }, None)}
+    fn next_err(&mut self, err_id: CompErrID, err_msg: String) -> Result<char, PhoenixError> { 
         match self.next() {
             None | Some('\0') => Err(PhoenixError::Compile { id: err_id, row: self.row, col: self.col, msg: err_msg }),
             Some(c) => Ok(c),
+        }
+    }
+    fn expect_char(&mut self, expected: char) -> Result<char, PhoenixError> {
+        match self.next() {
+            Some(c) if c == expected => Ok(expected),
+            Some(c) => Err(PhoenixError::Compile { id: CompErrID::InvalidCharacter, row: self.row, col: self.col, msg: format!("Expected '{expected}', found '{c}'") }),
+            None => Err(PhoenixError::Compile { id: CompErrID::InvalidCharacter, row: self.row, col: self.col, msg: format!("Expected '{expected}'") }),
         }
     }
 
@@ -101,10 +108,11 @@ impl Scanner {
                 '<' => res.push(self.make_double('=', Less, LessEq)),
 
                 '"' => self.string(&mut res)?,
+                '\'' => self.char(&mut res)?,
                 '`' => res.push(Token::make(&self, Backtick, None)),
                 c if c.is_ascii_digit() => self.number(&mut res, c),
                 c if c.is_ascii_alphabetic() || c == '_' => self.identifier(&mut res, c, &keywords)?,
-                _ => return Err(PhoenixError::Compile { id: CompErrID::InvalidChar, row: self.row, col: self.col, msg: format!("Invalid character {c} at {}::{}", self.row, self.col) })
+                _ => return Err(PhoenixError::Compile { id: CompErrID::InvalidCharacter, row: self.row, col: self.col, msg: format!("Invalid character {c} at {}::{}", self.row, self.col) })
             }
         }
         Ok(res)
@@ -130,6 +138,24 @@ impl Scanner {
         Ok(())
     }
 
+    fn char(&mut self, res: &mut Vec<Token>) -> Result<(), PhoenixError> {
+        macro_rules! next_char { () => { self.next_err(CompErrID::UnterminatedChar, format!("Missing closing ' for string started at {}::{}", self.row, self.col)) };}
+        let mut c = next_char!()?;
+
+        if c == '\'' { return Err(PhoenixError::Compile { id: CompErrID::InvalidCharLiteral, row: self.row, col: self.row, msg: format!("Char literal cannot be empty") }); }
+
+        match c {
+            '\\' => c = match next_char!()? { 'n' => '\n', 'r' => '\r', 't' => '\t', '0' => '\0', p => p },
+            '\n' | '\r' | '\t' => return Err(PhoenixError::Compile { id: CompErrID::InvalidCharacter, row: self.row, col: self.col, msg: format!("Cannot use special characters in char literals") }),
+            _ => {}
+        }
+
+        self.expect_char('\'')?;
+
+        res.push(Token::make(&self, Char, Some(String::from(c))));
+        Ok(())
+    }
+
     fn number(&mut self, res: &mut Vec<Token>, c: char) {
         let mut str = String::from(c);
         let mut dot = false;
@@ -143,7 +169,7 @@ impl Scanner {
             str.push(c);
             self.next();
         }
-        res.push(Token::make(&self, if dot { Int } else { Dec }, Some(str)));
+        res.push(Token::make(&self, if dot { Dec } else { Int }, Some(str)));
     }
     
     fn identifier(&mut self, res: &mut Vec<Token>, c: char, keywords: &FxHashMap<&'static str, TokenType>) -> Result<(), PhoenixError> {

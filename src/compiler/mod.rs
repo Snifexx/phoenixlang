@@ -5,7 +5,7 @@ use self::module::Module;
 pub mod chunk;
 pub mod scanner;
 mod token;
-mod module;
+pub mod module;
 
 pub struct Compiler {
     interned_str: FxHashSet<Rc<String>>,

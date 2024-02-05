@@ -1,10 +1,11 @@
 use core::panic;
 use std::{string::String, any::TypeId};
 use std::rc::Rc;
+use clap::builder::Str;
 use rustc_hash::{FxHashMap, FxHashSet};
 use crate::{error::PhoenixError, debug::debug_chunk};
 
-use self::logic::plus;
+use self::logic::{plus, minus, star, slash};
 use self::types::Type;
 
 use crate::FBOpCode::*;
@@ -34,31 +35,34 @@ impl Module {
     #[inline(always)]
     pub fn curr_tok(&mut self) -> &mut Token { &mut self.tokens[self.i] }
     
-    pub fn compile(mut self, interned_str: &mut FxHashSet<Rc<String>>) -> Result<(), PhoenixError> {
+    pub fn compile(mut self, interned_str: &mut FxHashSet<Rc<String>>) -> Result<Chunk, PhoenixError> {
         
-        while self.tokens[self.i].ty != Eof {
+        while self.curr_tok().ty != Eof {
             self.expression(0, interned_str)?;
         }
 
-        debug_chunk(&self.chunk.build());
-        Ok(())
+        //debug_chunk(&self.chunk.build());
+        Ok(self.chunk)
     }
 
     pub fn expression(&mut self, min_bp: u8, interned_str: &mut FxHashSet<Rc<String>>) -> Result<Type, PhoenixError> {
-        self.i += 1;
         let lht_pos = self.curr_tok().pos;
         let mut lht = match self.curr_tok().ty {
             True | False => self.bool(),
-            Int => self.int(),
+            Int => self.int(), 
             Dec => self.dec(),
-            _ => unreachable!(),
+            Str => self.string(), 
+            Char => self.char(),
+            ty => unreachable!("{:?}", ty),
         };
+        self.i += 1;
 
         loop {
-            let op_i = self.i + 1;
-            let op = match self.tokens[self.i + 1].ty {
+            let op_i = self.i;
+            if self.tokens[self.i - 1].pos.0 != self.curr_tok().pos.0 { break; }
+            let op = match self.curr_tok().ty {
                 Eof => break,
-                op @ (Plus | Minus | Star | Slash) => &self.tokens[self.i + 1], 
+                op @ (Plus | Minus | Star | Slash) => &self.tokens[op_i], 
                 _ => unreachable!(),
             };
             
@@ -96,6 +100,7 @@ impl Module {
 
             break
         }
+
         Ok(lht)
     }
     
@@ -114,12 +119,28 @@ impl Module {
         Type::Dec
     }
 
+    fn string(&mut self) -> Type {
+        let str = self.curr_tok().lexeme.take().unwrap();
+        self.chunk.write_const(Const::String(str));
+        Type::Str
+    }
+
+    fn char(&mut self) -> Type {
+        let char = self.curr_tok().lexeme.take().unwrap().chars().next().unwrap();
+        self.chunk.write_const(Const::Char(char));
+        Type::Char
+    }
+
     fn operation(chunk: &mut Chunk, lht: (Type, (u16, u16)), rht: (Type, (u16, u16)), op: &Token) -> Result<Type, PhoenixError> {
         match op.ty {
             Plus => plus(chunk, lht, rht, op),
+            Minus => minus(chunk, lht, rht, op),
+            Star => star(chunk, lht, rht, op),
+            Slash => slash(chunk, lht, rht, op),
             _ => todo!()
         }
     }
+
 }
 
 // bp stands for binding power

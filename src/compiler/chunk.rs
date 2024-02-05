@@ -18,7 +18,8 @@ pub enum ConstPool {
 pub enum Const {
     Int(i64),
     Dec(u64),
-    String(String)
+    String(String),
+    Char(char)
 }
 
 impl Debug for Const { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -26,6 +27,7 @@ impl Debug for Const { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fm
         Const::String(v) => write!(f, "str: '{v}'"),
         Const::Int(v) => write!(f, "int: {v}"),
         Const::Dec(v) => write!(f, "dec: {}", f64::from_bits(*v)),
+        Const::Char(v) => write!(f, "char: '{v}'"),
     }}}
 
 impl ConstPool {

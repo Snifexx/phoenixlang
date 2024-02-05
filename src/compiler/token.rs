@@ -32,7 +32,7 @@ pub enum TokenType {
     More, MoreEq,
     Less, LessEq,
 
-    Identifier, String, Int, Dec,
+    Identifier, String, Int, Dec, Char,
 
     And, Alias, As, Else, False, Fn, If, Infix, Let, Loop,
     Macro, Mod, Mut, Not, Or, Print, Pub, Return, Selff,

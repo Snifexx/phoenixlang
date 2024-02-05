@@ -16,13 +16,17 @@ pub struct Vm {
 }
 
 impl Vm {
-    fn run(mut self, debug_flag: bool) -> u8 {
+    pub fn run(mut self, debug_flag: bool) -> u8 {
         loop {
             let byte = self.chunk.code[self.pc as usize];
             let size = FBOpCode::size()[byte as usize] as usize;
             let exit_code = run(&mut self, size);
             if let Some(code) = exit_code { return code }
             if debug_flag { debug(self.pc, &self.chunk.code[self.pc as usize..self.pc as usize + size]); }
+            if self.chunk.code.len() - size <= self.pc as usize { break; } 
+            self.pc += size as u64;
         }
+        println!("{:?}\n", self.stack);
+        0
     }
 }
