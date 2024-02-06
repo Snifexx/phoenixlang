@@ -5,7 +5,7 @@ use clap::builder::Str;
 use rustc_hash::{FxHashMap, FxHashSet};
 use crate::{error::PhoenixError, debug::debug_chunk};
 
-use self::logic::{plus, minus, star, slash};
+use self::logic::{plus, minus, star, slash, negate};
 use self::types::Type;
 
 use crate::FBOpCode::*;
@@ -49,10 +49,30 @@ impl Module {
         let lht_pos = self.curr_tok().pos;
         let mut lht = match self.curr_tok().ty {
             True | False => self.bool(),
-            Int => self.int(), 
-            Dec => self.dec(),
-            Str => self.string(), 
+            Int => self.int(),
+            Dec => self.dec(), 
+            String => {println!("{:?}",self.curr_tok().ty); self.string()} 
+            Plus => {
+                self.i += 1;
+                let ret_ty = self.expression(9, interned_str)?;
+                self.i -= 1; 
+                ret_ty
+            }
             Char => self.char(),
+            LParen => {
+                self.i += 1;
+                let value = self.expression(0, interned_str)?;
+                assert_eq!(self.curr_tok().ty, RParen);
+                value
+            }
+            op @ Minus => {
+                let ((), r_bp) = prefix_bp(op);
+                let tok_i = self.i; self.i += 1;
+                let rht_pos = self.curr_tok().pos;
+                let rhs = self.expression(r_bp, interned_str)?;
+                self.i -= 1;
+                Self::operation(&mut self.chunk, None, (rhs, rht_pos), &self.tokens[tok_i])?
+            }
             ty => unreachable!("{:?}", ty),
         };
         self.i += 1;
@@ -61,9 +81,9 @@ impl Module {
             let op_i = self.i;
             if self.tokens[self.i - 1].pos.0 != self.curr_tok().pos.0 { break; }
             let op = match self.curr_tok().ty {
-                Eof => break,
+                RParen | Eof => break,
                 op @ (Plus | Minus | Star | Slash) => &self.tokens[op_i], 
-                _ => unreachable!(),
+                op => unreachable!("{op:?}"),
             };
             
             if let Some((l_bp, ())) = postfix_bp(op.ty) { // Postfix
@@ -75,7 +95,6 @@ impl Module {
                 lht = if op.ty == LSquare {
                     let rht_pos = self.curr_tok().pos;
                     let rhs = self.expression(0, interned_str)?;
-                    self.i += 1;
                     assert_eq!(self.curr_tok().ty, RSquare);
                     // TODO Lquare get func
                     Type::Void // TODO type calculator
@@ -84,16 +103,14 @@ impl Module {
             }
 
             if let Some((l_bp, r_bp)) = infix_bp(op.ty) {
-                if l_bp < min_bp {
-                    break;
-                }
+                if l_bp < min_bp { break; }
                 self.i += 1;
 
                 lht = {
                     let rht_pos = self.curr_tok().pos;
                     let rht = self.expression(r_bp, interned_str)?;
                     let op = &self.tokens[op_i];
-                    Self::operation(&mut self.chunk, (lht, lht_pos), (rht, rht_pos), op)?
+                    Self::operation(&mut self.chunk, Some((lht, lht_pos)), (rht, rht_pos), op)?
                 };
                 continue;
             }
@@ -120,6 +137,7 @@ impl Module {
     }
 
     fn string(&mut self) -> Type {
+        println!("{:?}", self.curr_tok());
         let str = self.curr_tok().lexeme.take().unwrap();
         self.chunk.write_const(Const::String(str));
         Type::Str
@@ -131,12 +149,12 @@ impl Module {
         Type::Char
     }
 
-    fn operation(chunk: &mut Chunk, lht: (Type, (u16, u16)), rht: (Type, (u16, u16)), op: &Token) -> Result<Type, PhoenixError> {
+    fn operation(chunk: &mut Chunk, lht: Option<(Type, (u16, u16))>, rht: (Type, (u16, u16)), op: &Token) -> Result<Type, PhoenixError> {
         match op.ty {
-            Plus => plus(chunk, lht, rht, op),
-            Minus => minus(chunk, lht, rht, op),
-            Star => star(chunk, lht, rht, op),
-            Slash => slash(chunk, lht, rht, op),
+            Plus => plus(chunk, lht.unwrap(), rht, op),
+            Minus => if lht.is_some() { minus(chunk, lht.unwrap(), rht, op) } else { negate(chunk, rht, op) }
+            Star => star(chunk, lht.unwrap(), rht, op),
+            Slash => slash(chunk, lht.unwrap(), rht, op),
             _ => todo!()
         }
     }
@@ -151,6 +169,7 @@ fn prefix_bp(op: TokenType) -> ((), u8) {
         _ => panic!("bad op: {:?}", op),
     }
 }
+
 fn postfix_bp(op: TokenType) -> Option<(u8, ())> {
     let res = match op {
 //        '[' => (11, ()),
@@ -158,6 +177,7 @@ fn postfix_bp(op: TokenType) -> Option<(u8, ())> {
     };
     Some(res)
 }
+
 fn infix_bp(op: TokenType) -> Option<(u8, u8)> {
     let res = match op {
         Eq | PlusEq | MinusEq | StarEq | SlashEq => (2, 1),

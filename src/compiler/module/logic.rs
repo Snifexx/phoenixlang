@@ -22,7 +22,7 @@ pub fn plus(chunk: &mut Chunk, lht: (Type, (u16, u16)), rht: (Type, (u16, u16)),
             };
             chunk.write_op(FBOpCode::OpAdd); Ok(ret_ty)
         }
-        ty => type_error(rht.0, &[], lht.1.0, lht.1.1, format!("Type '{}' has not 'plus' function", ty)),
+        ty => type_error(rht.0, &[], op.pos.0, op.pos.1, format!("Type '{}' has not 'plus' function", ty)),
     }
 }
 
@@ -34,17 +34,22 @@ macro_rules! int_float_arithmetics {
                     let ret_ty = type_error(rht.0, &[ty], lht.1.0, lht.1.1, format!("Type '{}' cannot be {} to a {}", rht.0, $verb, ty))?;
                     chunk.write_op($op); Ok(ret_ty)
                 }
-                ty => type_error(rht.0, &[], lht.1.0, lht.1.1, format!("Type '{}' has not '{}' function", ty, $name_str)),
+                ty => type_error(rht.0, &[], op.pos.0, op.pos.1, format!("Type '{}' has no '{}' function", ty, $name_str)),
             }
         }
     };
 }
-
 int_float_arithmetics!(minus, "minus", FBOpCode::OpSub, "subtracted");
 int_float_arithmetics!(star, "mul", FBOpCode::OpMul, "multiplied");
 int_float_arithmetics!(slash, "div", FBOpCode::OpDiv, "divided");
 
 
+pub fn negate(chunk: &mut Chunk, rht: (Type, (u16, u16)), op: &Token) -> Result<Type, PhoenixError> {
+    match rht.0 {
+        ty @ (Type::Int | Type::Dec) => { chunk.write_op(FBOpCode::OpNeg); Ok(ty) }
+        ty => type_error(rht.0, &[], op.pos.0, op.pos.1, format!("Type '{}' has no 'negate' function", ty)),
+    }
+}
 
 
 

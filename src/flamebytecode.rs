@@ -2,14 +2,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use crate::vm::Stacktrait;
+use crate::vm::{Stacktrait, value};
 use crate::{op_codes, vm::{Vm, value::Value}, compiler::chunk::Const};
 
 op_codes! {
     pub enum FBOpCode {
         OpReturn = 0 => 1,
         OpConstant => 4, OpTrue => 1, OpFalse => 1,
-        OpAdd => 1, OpSub => 1, OpMul => 1, OpDiv => 1,
+        OpAdd => 1, OpSub => 1, OpMul => 1, OpDiv => 1, OpNeg => 1,
     }
 }
 
@@ -28,6 +28,7 @@ pub fn debug(i: u64, slice: &[u8]) {
         FBOpCode::OpSub => oper!("OpSub"),
         FBOpCode::OpMul => oper!("OpMul"),
         FBOpCode::OpDiv => oper!("OpDiv"),
+        FBOpCode::OpNeg => oper!("OpNeg"),
     } 
 }
 
@@ -96,6 +97,15 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
                 (Value::Dec(dec_f), Value::Dec(dec_s)) => push!(Value::Dec(*dec_f / *dec_s)),
                 (_, _) => unreachable!()
             };
+        }
+        FBOpCode::OpNeg => {
+            pop!(value);
+
+            match &*value {
+                Value::Int(value) => push!(Value::Int(-*value)),
+                Value::Dec(value) => push!(Value::Dec(-*value)),
+                _ => unreachable!(),
+            }
         }
     }
     None

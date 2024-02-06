@@ -28,9 +28,10 @@ mod test {
     pub fn test() -> Result<(), PhoenixError> {
         let src = 
 r#"
-10.0 / 3.0
+-10.0 / (+3.0 - 1.0)
 "#;
         let scanned = Scanner::new(src.to_string()).scan()?;
+        println!("{:?}",scanned);
 
         let chunk = Module::new(scanned, Rc::new("Test".to_string())).compile(&mut FxHashSet::default())?.build();
         debug_chunk(&chunk);
