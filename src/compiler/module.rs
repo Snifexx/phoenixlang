@@ -1,8 +1,12 @@
 use core::panic;
+use std::collections::{HashMap, HashSet};
+use std::hash::BuildHasherDefault;
 use std::{string::String, any::TypeId};
 use std::rc::Rc;
+use ahash::AHasher;
 use clap::builder::Str;
-use rustc_hash::{FxHashMap, FxHashSet};
+use crate::error::CompErrID;
+use crate::flamebytecode::FBOpCode;
 use crate::{error::PhoenixError, debug::debug_chunk};
 
 use self::logic::{plus, minus, star, slash, negate};
@@ -15,10 +19,12 @@ use super::{token::{Token, self, TokenType::*}, chunk::{Chunk, Const}};
 mod types;
 mod logic;
 
+type AHashMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
+
 pub struct Module {
     id: Rc<String>,
     tokens: Vec<Token>, i: usize,
-    imports: FxHashMap<Rc<String>, Rc<String>>,
+    imports: AHashMap<Rc<String>, Rc<String>>,
     items: Vec<Items>,
     // TODO temp
     chunk: Chunk,
@@ -27,41 +33,58 @@ pub struct Module {
 struct Items {
     name: Rc<String>,
     code: Chunk,
-    dependencies: FxHashSet<Rc<String>>,
+    dependencies: HashSet<Rc<String>, BuildHasherDefault<AHasher>>,
 }
 
 impl Module {
-    pub fn new(tokens: Vec<Token>, id: Rc<String>) -> Self { Self { tokens, id, i: 0, imports:  FxHashMap::default(), items: Vec::new(), chunk: Chunk::new() }}
+    pub fn new(tokens: Vec<Token>, id: Rc<String>) -> Self { Self { tokens, id, i: 0, imports:  AHashMap::default(), items: Vec::new(), chunk: Chunk::new() }}
     #[inline(always)]
     pub fn curr_tok(&mut self) -> &mut Token { &mut self.tokens[self.i] }
     
-    pub fn compile(mut self, interned_str: &mut FxHashSet<Rc<String>>) -> Result<Chunk, PhoenixError> {
-        
+    pub fn compile(mut self) -> Result<Chunk, Vec<PhoenixError>> {
+        let mut errors = vec![];
         while self.curr_tok().ty != Eof {
-            self.expression(0, interned_str)?;
+            let err = self.loose_statement();
+            if err.is_err() { errors.push(err.unwrap_err()); }
         }
-
-        //debug_chunk(&self.chunk.build());
-        Ok(self.chunk)
+        
+        if errors.is_empty() { Ok(self.chunk) } else { Err(errors) }
     }
 
-    pub fn expression(&mut self, min_bp: u8, interned_str: &mut FxHashSet<Rc<String>>) -> Result<Type, PhoenixError> {
+    pub fn loose_statement(&mut self) -> Result<(), PhoenixError> {
+        match &self.tokens[self.i] {
+            c if c.lexeme.as_ref().is_some_and(|str| &str[1..] == "print") => {
+                self.i += 1;
+                let pos = self.tokens[self.i].pos;
+                let ty = self.expression_parsing(0)?;
+                match ty { Type::Void => return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: pos.0, col: pos.1, msg: String::from("print statement requires a non-void expression") }), _ => {} }
+                self.chunk.write_op(FBOpCode::OpPrint);
+                return Ok(());
+            }
+            _ => {}
+        }
+        let ty = self.expression_parsing(0)?;
+        match ty { Type::Void => {} _ => self.chunk.write_op(FBOpCode::OpPop), }
+        Ok(())
+    }
+
+   pub fn expression_parsing(&mut self, min_bp: u8) -> Result<Type, PhoenixError> {
         let lht_pos = self.curr_tok().pos;
         let mut lht = match self.curr_tok().ty {
             True | False => self.bool(),
             Int => self.int(),
             Dec => self.dec(), 
-            String => {println!("{:?}",self.curr_tok().ty); self.string()} 
+            String => self.string(),
             Plus => {
                 self.i += 1;
-                let ret_ty = self.expression(9, interned_str)?;
+                let ret_ty = self.expression_parsing(9)?;
                 self.i -= 1; 
                 ret_ty
             }
             Char => self.char(),
             LParen => {
                 self.i += 1;
-                let value = self.expression(0, interned_str)?;
+                let value = self.expression_parsing(0)?;
                 assert_eq!(self.curr_tok().ty, RParen);
                 value
             }
@@ -69,7 +92,7 @@ impl Module {
                 let ((), r_bp) = prefix_bp(op);
                 let tok_i = self.i; self.i += 1;
                 let rht_pos = self.curr_tok().pos;
-                let rhs = self.expression(r_bp, interned_str)?;
+                let rhs = self.expression_parsing(r_bp)?;
                 self.i -= 1;
                 Self::operation(&mut self.chunk, None, (rhs, rht_pos), &self.tokens[tok_i])?
             }
@@ -94,7 +117,7 @@ impl Module {
 
                 lht = if op.ty == LSquare {
                     let rht_pos = self.curr_tok().pos;
-                    let rhs = self.expression(0, interned_str)?;
+                    let rhs = self.expression_parsing(0)?;
                     assert_eq!(self.curr_tok().ty, RSquare);
                     // TODO Lquare get func
                     Type::Void // TODO type calculator
@@ -102,13 +125,13 @@ impl Module {
                 continue;
             }
 
-            if let Some((l_bp, r_bp)) = infix_bp(op.ty) {
+            if let Some((l_bp, r_bp)) = infix_bp(op.ty) { // Infix
                 if l_bp < min_bp { break; }
                 self.i += 1;
 
                 lht = {
                     let rht_pos = self.curr_tok().pos;
-                    let rht = self.expression(r_bp, interned_str)?;
+                    let rht = self.expression_parsing(r_bp)?;
                     let op = &self.tokens[op_i];
                     Self::operation(&mut self.chunk, Some((lht, lht_pos)), (rht, rht_pos), op)?
                 };
@@ -123,26 +146,21 @@ impl Module {
     
     #[inline(always)]
     fn bool(&mut self) -> Type { let op = if self.curr_tok().ty == True { OpTrue } else { OpFalse }; self.chunk.write_op(op); Type::Bool }
-
     fn int(&mut self) -> Type {
         let num = self.curr_tok().lexeme.take().unwrap().parse::<i64>().unwrap();
         self.chunk.write_const(Const::Int(num));
         Type::Int
     }
-
     fn dec(&mut self) -> Type {
         let num = self.curr_tok().lexeme.take().unwrap().parse::<f64>().unwrap();
         self.chunk.write_const(Const::Dec(num.to_bits()));
         Type::Dec
     }
-
     fn string(&mut self) -> Type {
-        println!("{:?}", self.curr_tok());
         let str = self.curr_tok().lexeme.take().unwrap();
         self.chunk.write_const(Const::String(str));
         Type::Str
     }
-
     fn char(&mut self) -> Type {
         let char = self.curr_tok().lexeme.take().unwrap().chars().next().unwrap();
         self.chunk.write_const(Const::Char(char));
@@ -158,7 +176,6 @@ impl Module {
             _ => todo!()
         }
     }
-
 }
 
 // bp stands for binding power
@@ -169,7 +186,6 @@ fn prefix_bp(op: TokenType) -> ((), u8) {
         _ => panic!("bad op: {:?}", op),
     }
 }
-
 fn postfix_bp(op: TokenType) -> Option<(u8, ())> {
     let res = match op {
 //        '[' => (11, ()),
@@ -177,7 +193,6 @@ fn postfix_bp(op: TokenType) -> Option<(u8, ())> {
     };
     Some(res)
 }
-
 fn infix_bp(op: TokenType) -> Option<(u8, u8)> {
     let res = match op {
         Eq | PlusEq | MinusEq | StarEq | SlashEq => (2, 1),

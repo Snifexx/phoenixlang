@@ -1,22 +1,29 @@
-use std::rc::Rc;
-use rustc_hash::{FxHashMap, FxHashSet};
-use self::module::Module;
+use std::{rc::Rc, collections::HashMap, hash::BuildHasherDefault};
+use ahash::AHasher;
+
+use crate::error::PhoenixError;
+
+use self::{module::Module, scanner::Scanner, chunk::Chunk};
 
 pub mod chunk;
 pub mod scanner;
 mod token;
 pub mod module;
 
+type AHashMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
+
 pub struct Compiler {
-    interned_str: FxHashSet<Rc<String>>,
-    modules: FxHashMap<Rc<String>, Module>,
+    modules: AHashMap<Rc<String>, Module>,
 }
 
 impl Compiler {
-    pub fn new() -> Self { Self { interned_str: FxHashSet::default(), modules: FxHashMap::default() }}
+    pub fn new() -> Self { Self { modules: AHashMap::default() }}
 
-    pub fn compile_mod(&mut self, module: Rc<String>) {
-        // TODO
+    pub fn compile_string(str: String) -> Result<Chunk, Vec<PhoenixError>> {
+        let tokens = Scanner::new(str).scan();
+        if tokens.is_err() { return Err(vec![tokens.unwrap_err()]) }
+        Module::new(tokens.unwrap(), Rc::new(String::from("test.str"))).compile()
     }
+
 }
 

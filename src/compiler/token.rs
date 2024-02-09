@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::string::String;
 use std::ops::RangeBounds;
 use TokenType::*;
-use rustc_hash::FxHashMap;
 
 use crate::compiler::scanner::Scanner;
 
@@ -43,4 +42,5 @@ pub enum TokenType {
 
 impl Token {
     pub fn make(scanner: &Scanner, ty: TokenType, lexeme: Option<String>) -> Token { Token { ty, lexeme, pos: (scanner.row, scanner.col) }}
+    pub fn make_pos(ty: TokenType, lexeme: Option<String>, pos: (u16, u16)) -> Token { Token { ty, lexeme, pos }}
 }

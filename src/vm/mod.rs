@@ -1,4 +1,6 @@
-use std::{cell::RefCell, rc::Rc, usize};
+use std::{cell::RefCell, rc::Rc, usize, collections::{HashMap, HashSet}, hash::BuildHasherDefault};
+use ahash::AHasher;
+
 use crate::{compiler::chunk::{Chunk, Const}, flamebytecode::{FBOpCode, debug, run}};
 use self::value::Value;
 
@@ -13,6 +15,7 @@ pub struct Vm {
     pub chunk: Chunk,
     pub pc: u64,
     pub stack: Stack,
+    pub str_intern: HashSet<Rc<String>, BuildHasherDefault<AHasher>>,
 }
 
 impl Vm {
@@ -26,7 +29,7 @@ impl Vm {
             if self.chunk.code.len() - size <= self.pc as usize { break; } 
             self.pc += size as u64;
         }
-        println!("{:?}\n", self.stack);
+        println!("\n\n{:?}\n", self.stack);
         0
     }
 }

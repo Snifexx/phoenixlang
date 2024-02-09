@@ -9,7 +9,9 @@ op_codes! {
     pub enum FBOpCode {
         OpReturn = 0 => 1,
         OpConstant => 4, OpTrue => 1, OpFalse => 1,
+        OpPop => 1,
         OpAdd => 1, OpSub => 1, OpMul => 1, OpDiv => 1, OpNeg => 1,
+        OpPrint => 1,
     }
 }
 
@@ -23,12 +25,12 @@ pub fn debug(i: u64, slice: &[u8]) {
             let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a});
             oper!("OpConstant" "\t#{}", a);
         }
+        FBOpCode::OpPop =>oper!("OpPop"), 
         FBOpCode::OpTrue => oper!("OpTrue"), FBOpCode::OpFalse => oper!("OpFalse"),
-        FBOpCode::OpAdd => oper!("OpAdd"),
-        FBOpCode::OpSub => oper!("OpSub"),
-        FBOpCode::OpMul => oper!("OpMul"),
-        FBOpCode::OpDiv => oper!("OpDiv"),
+        FBOpCode::OpAdd => oper!("OpAdd"), FBOpCode::OpSub => oper!("OpSub"),
+        FBOpCode::OpMul => oper!("OpMul"), FBOpCode::OpDiv => oper!("OpDiv"),
         FBOpCode::OpNeg => oper!("OpNeg"),
+        FBOpCode::OpPrint => oper!("OpPrint"),
     } 
 }
 
@@ -45,11 +47,17 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
             let value = match &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize] {
                 Const::Int(v) => Value::Int(*v),
                 Const::Dec(v) => Value::Dec(f64::from_bits(*v)),
-                Const::String(v) => Value::Str(Box::new(v.clone())),
+                Const::String(v) => {
+                    let v = match vm.str_intern.get(v) {
+                        Some(rc) => rc,
+                        None => { vm.str_intern.insert(Rc::new(v.clone())); vm.str_intern.get(v).unwrap() }
+                    };
+                    Value::Str(v.clone())
+                },
                 Const::Char(c) => Value::Char(*c),
-            }; vm.stack.push_val(value)
-        }
+            }; vm.stack.push_val(value) }
         FBOpCode::OpTrue => vm.stack.push_val(Value::Bool(true)), FBOpCode::OpFalse => vm.stack.push_val(Value::Bool(false)),
+        FBOpCode::OpPop => { vm.stack.pop(); }
         FBOpCode::OpAdd => {
             pop!(second);
             pop!(first);
@@ -59,11 +67,19 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
                 (Value::Dec(dec_f), Value::Dec(dec_s)) => push!(Value::Dec(*dec_f + *dec_s)),
                 (Value::Str(str), Value::Str(to_concat)) => {
                     let mut new_str = String::from_str(str).unwrap(); new_str.push_str(to_concat);
-                    push!(Value::Str(Box::new(new_str)));
+                    let v = match vm.str_intern.get(&new_str) {
+                        Some(rc) => rc.clone(),
+                        None => { let a = Rc::new(new_str); vm.str_intern.insert(a.clone()); a }
+                    };
+                    push!(Value::Str(v));
                 }
                 (Value::Str(str), Value::Char(to_concat)) => {
                     let mut new_str = String::from_str(str).unwrap(); new_str.push(*to_concat);
-                    push!(Value::Str(Box::new(new_str)));
+                    let v = match vm.str_intern.get(&new_str) {
+                        Some(rc) => rc.clone(),
+                        None => { let a = Rc::new(new_str); vm.str_intern.insert(a.clone()); a }
+                    };
+                    push!(Value::Str(v));
                 }
                 (_, _) => unreachable!()
             };
@@ -107,6 +123,7 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
                 _ => unreachable!(),
             }
         }
+        FBOpCode::OpPrint => { pop!(v); print!("{}", v); }
     }
     None
 }

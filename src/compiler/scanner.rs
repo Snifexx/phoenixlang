@@ -1,11 +1,13 @@
-use std::{string::String, u8};
+use std::{string::String, u8, collections::HashMap, hash::BuildHasherDefault, default};
 use core::panic;
 use std::str::Chars;
 
-use rustc_hash::FxHashMap;
+use ahash::AHasher;
 
 use crate::{utils::{StringExt, OwnedChars}, error::{PhoenixError, CompErrID}, IDENTIFIER_MAX_LENGTH};
 use crate::compiler::token::{Token, TokenType::{*, self}};
+
+type AHashMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 pub struct Scanner {
     src: OwnedChars, 
@@ -18,10 +20,13 @@ impl Scanner {
     pub fn new(src: String) -> Self { let mut iter = src.into_chars(); Self { peek: iter.next(), peek_more: iter.next(), src: iter, row: 1, col: 0, indent: 0, }}
     fn next(&mut self) -> Option<char> {
         let ret = self.peek; self.peek = self.peek_more; self.peek_more = self.src.next(); 
-        if ret.is_some_and(|x| x == '\n') { self.row += 1; self.col = 0 } else { self.col += 1 } 
+        if ret.is_some_and(|x| x == '\n') { self.row += 1; self.col = 1 } else { self.col += 1 } 
         ret 
     }
-    fn make_double(&self, expected: char, single: TokenType, double: TokenType) -> Token { Token::make(&self, if (self.peek.is_some_and(|x| x == expected)) { double } else { single }, None)}
+    fn make_double(&mut self, expected: char, single: TokenType, double: TokenType) -> Token {
+        if (self.peek.is_some_and(|x| x == expected)) { self.next(); Token::make_pos(double, None, (self.row, self.col - 1)) }
+        else { Token::make(&self, single, None) }
+    }
     fn next_err(&mut self, err_id: CompErrID, err_msg: String) -> Result<char, PhoenixError> { 
         match self.next() {
             None | Some('\0') => Err(PhoenixError::Compile { id: err_id, row: self.row, col: self.col, msg: err_msg }),
@@ -37,10 +42,11 @@ impl Scanner {
     }
 
     pub fn scan(mut self) -> Result<Vec<Token>, PhoenixError> {
-        let keywords = FxHashMap::from_iter([ ("and", And), ("alias", Alias), ("as", As), ("else", Else), ("false", False), ("fn", Fn), ("if", If),
-                                            ("infix", Infix), ("let", Let), ("loop", Loop), ("not", Not), ("macro", Macro), ("mod", Mod), ("mut", Mut),
-                                            ("or", Or), ("print", Print), ("pub", Pub), ("return", Return), ("self", Selff), 
-                                            ("struct", Struct), ("super", Super), ("trait", Trait), ("true", True), ("while", While), ("xor", Xor) ]);
+        let keywords = AHashMap::from_iter(
+            [ ("and", And), ("alias", Alias), ("as", As), ("else", Else), ("false", False), ("fn", Fn), ("if", If),
+            ("infix", Infix), ("let", Let), ("loop", Loop), ("not", Not), ("macro", Macro), ("mod", Mod), ("mut", Mut),
+            ("or", Or), ("pub", Pub), ("return", Return), ("self", Selff), 
+            ("struct", Struct), ("super", Super), ("trait", Trait), ("true", True), ("while", While), ("xor", Xor) ]);
         let mut res = vec![];
         let mut c_ = None; let mut c = '0';
 
@@ -94,7 +100,12 @@ impl Scanner {
 
                 '.' => res.push(Token::make(&self, Dot, None)),
                 '+' => res.push(Token::make(&self, Plus, None)),
-                '-' => res.push(Token::make(&self, match self.peek { Some('=') => MinusEq, Some('>') => Arrow, _ => Minus }, None)),
+                '-' => res.push(
+                    match self.peek { 
+                        Some('=') => { let a = Token::make(&self, MinusEq, None); self.next(); a }
+                        Some('>') => { let a = Token::make(&self, Arrow, None); self.next(); a }
+                        _ => Token::make(&self, Minus, None),
+                    }),
                 '/' => res.push(self.make_double('=', Slash, SlashEq)),
                 '*' => res.push(self.make_double('=', Star, StarEq)),
 
@@ -103,7 +114,12 @@ impl Scanner {
                 '|' => res.push(self.make_double('>', Bar, Pipe)),
 
                 '!' => res.push(self.make_double('=', Bang, BangEq)),
-                '=' => res.push(Token::make(&self, match self.peek { Some('=') => EqEq, Some('>') => ArrowEq, _ => Eq }, None)),
+                '=' => res.push(
+                    match self.peek { 
+                        Some('=') => { let a = Token::make(&self, EqEq, None); self.next(); a }
+                        Some('>') => { let a = Token::make(&self, ArrowEq, None); self.next(); a }
+                        _ => Token::make(&self, Eq, None),
+                    }),
                 '>' => res.push(self.make_double('=', More, MoreEq)),
                 '<' => res.push(self.make_double('=', Less, LessEq)),
 
@@ -122,6 +138,7 @@ impl Scanner {
     fn string(&mut self, res: &mut Vec<Token>) -> Result<(), PhoenixError> {
         macro_rules! next_string { () => { self.next_err(CompErrID::UnterminatedString, format!("Missing closing \" for string started at {}::{}", self.row, self.col)) };}
         let mut str = String::new();
+        let pos = (self.row, self.col - 1);
         loop {
             let mut c = next_string!()?;
             if c == '"' { break }
@@ -134,12 +151,14 @@ impl Scanner {
             str.push(c);
             if c == '\n' { let skip = self.indent as u32 * 4; for _ in 0..skip { next_string!()?;}}
         }
-        res.push(Token::make(&self, String, Some(str)));
+        res.push(Token::make_pos(String, Some(str), pos));
         Ok(())
     }
 
     fn char(&mut self, res: &mut Vec<Token>) -> Result<(), PhoenixError> {
         macro_rules! next_char { () => { self.next_err(CompErrID::UnterminatedChar, format!("Missing closing ' for string started at {}::{}", self.row, self.col)) };}
+
+        let pos = (self.row, self.col - 1);
         let mut c = next_char!()?;
 
         if c == '\'' { return Err(PhoenixError::Compile { id: CompErrID::InvalidCharLiteral, row: self.row, col: self.row, msg: format!("Char literal cannot be empty") }); }
@@ -152,11 +171,12 @@ impl Scanner {
 
         self.expect_char('\'')?;
 
-        res.push(Token::make(&self, Char, Some(String::from(c))));
+        res.push(Token::make_pos(Char, Some(String::from(c)), pos));
         Ok(())
     }
 
     fn number(&mut self, res: &mut Vec<Token>, c: char) {
+        let pos = (self.row, self.col - 1);
         let mut str = String::from(c);
         let mut dot = false;
         loop {
@@ -169,10 +189,11 @@ impl Scanner {
             str.push(c);
             self.next();
         }
-        res.push(Token::make(&self, if dot { Dec } else { Int }, Some(str)));
+        res.push(Token::make_pos(if dot { Dec } else { Int }, Some(str), pos));
     }
     
-    fn identifier(&mut self, res: &mut Vec<Token>, c: char, keywords: &FxHashMap<&'static str, TokenType>) -> Result<(), PhoenixError> {
+    fn identifier(&mut self, res: &mut Vec<Token>, c: char, keywords: &AHashMap<&'static str, TokenType>) -> Result<(), PhoenixError> {
+        let pos = (self.row, self.col - 1);
         let mut str = String::from(c);
         let mut can_be_type = true;
         loop {
@@ -192,7 +213,7 @@ impl Scanner {
         }
         
         let is_keyword = if can_be_type { keywords.get(&*str) } else { None };
-        res.push(Token::make(&self, if is_keyword.is_some() { *is_keyword.unwrap() } else { Identifier }, if is_keyword.is_none() { Some(format!("{}{str}", can_be_type as u8)) } else { None }));
+        res.push(Token::make_pos(if is_keyword.is_some() { *is_keyword.unwrap() } else { Identifier }, if is_keyword.is_none() { Some(format!("{}{str}", can_be_type as u8)) } else { None }, pos));
         Ok(())
     }
 }

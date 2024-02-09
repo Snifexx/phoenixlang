@@ -18,30 +18,27 @@ const IDENTIFIER_MAX_LENGTH: usize = 32;
 
 //#[cfg(test)]
 mod test {
-    use std::rc::Rc;
+    use std::{rc::Rc, mem, collections::HashSet};
 
-    use rustc_hash::{FxHashMap, FxHashSet};
 
-    use crate::{compiler::{scanner::Scanner, module::Module}, debug::debug_chunk, error::PhoenixError, vm::Vm};
+    use crate::{compiler::{scanner::Scanner, module::Module, Compiler}, debug::debug_chunk, error::PhoenixError, vm::{Vm, value::Value}};
 
     #[test]
-    pub fn test() -> Result<(), PhoenixError> {
+    pub fn test() -> Result<(), Vec<PhoenixError>> {
         let src = 
 r#"
--10.0 / (+3.0 - 1.0)
+print "sesso" + 1 
+print "sesso1" + 8
 "#;
-        let scanned = Scanner::new(src.to_string()).scan()?;
-        println!("{:?}",scanned);
 
-        let chunk = Module::new(scanned, Rc::new("Test".to_string())).compile(&mut FxHashSet::default())?.build();
+        let chunk = Compiler::compile_string(src.to_string())?;
         debug_chunk(&chunk);
-        let vm = Vm { chunk, pc: 0, stack: vec![] }.run(false);
+        let vm = Vm { chunk, pc: 0, stack: vec![], str_intern: HashSet::default() }.run(false);
         Ok(())
     }
 
     #[test]
     pub fn test_general() {
-
     }
 }
 

@@ -20,6 +20,7 @@ impl Display for Type {
 impl Type {
     pub fn bytes() -> Vec<u8> {
         // TODO
+        //      todo string encoding implementation, for now only utf-8
         vec![]
     }
 }
