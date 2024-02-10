@@ -26,7 +26,8 @@ pub struct Module {
     tokens: Vec<Token>, i: usize,
     imports: AHashMap<Rc<String>, Rc<String>>,
     items: Vec<Items>,
-    // TODO temp
+    panic_mode: bool,
+    // TODO chunk is temporary, will return module result table
     chunk: Chunk,
 }
 
@@ -37,31 +38,37 @@ struct Items {
 }
 
 impl Module {
-    pub fn new(tokens: Vec<Token>, id: Rc<String>) -> Self { Self { tokens, id, i: 0, imports:  AHashMap::default(), items: Vec::new(), chunk: Chunk::new() }}
+    pub fn new(tokens: Vec<Token>, id: Rc<String>) -> Self { Self { tokens, id, i: 0, imports:  AHashMap::default(), items: Vec::new(), chunk: Chunk::new(), panic_mode: false }}
     #[inline(always)]
     pub fn curr_tok(&mut self) -> &mut Token { &mut self.tokens[self.i] }
     
     pub fn compile(mut self) -> Result<Chunk, Vec<PhoenixError>> {
         let mut errors = vec![];
         while self.curr_tok().ty != Eof {
+            if self.panic_mode { // Panic Syncronization
+                if self.curr_tok().pos.1 != self.tokens[self.i + 1].pos.1 { self.i += 1 }
+                else if self.tokens[self.i].lexeme.as_ref().is_some_and(|x| x == "print") {}
+                else { match self.curr_tok().ty {
+                    Let => {}
+                    _ => { self.i += 1; continue; }
+                }}
+                self.panic_mode = false;
+            }
             let err = self.loose_statement();
-            if err.is_err() { errors.push(err.unwrap_err()); }
+            if err.is_err() { errors.push(err.unwrap_err()); self.panic_mode = true; }
         }
-        
+
         if errors.is_empty() { Ok(self.chunk) } else { Err(errors) }
     }
 
     pub fn loose_statement(&mut self) -> Result<(), PhoenixError> {
-        match &self.tokens[self.i] {
-            c if c.lexeme.as_ref().is_some_and(|str| &str[1..] == "print") => {
-                self.i += 1;
-                let pos = self.tokens[self.i].pos;
-                let ty = self.expression_parsing(0)?;
-                match ty { Type::Void => return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: pos.0, col: pos.1, msg: String::from("print statement requires a non-void expression") }), _ => {} }
-                self.chunk.write_op(FBOpCode::OpPrint);
-                return Ok(());
-            }
-            _ => {}
+        if self.tokens[self.i].lexeme.as_ref().is_some_and(|str| &str[1..] == "print") { //TODO temporary print
+            self.i += 1;
+            let pos = self.tokens[self.i].pos;
+            let ty = self.expression_parsing(0)?;
+            match ty { Type::Void => return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: pos.0, col: pos.1, msg: String::from("print statement requires a non-void expression") }), _ => {} }
+            self.chunk.write_op(FBOpCode::OpPrint);
+            return Ok(());
         }
         let ty = self.expression_parsing(0)?;
         match ty { Type::Void => {} _ => self.chunk.write_op(FBOpCode::OpPop), }
@@ -71,6 +78,7 @@ impl Module {
    pub fn expression_parsing(&mut self, min_bp: u8) -> Result<Type, PhoenixError> {
         let lht_pos = self.curr_tok().pos;
         let mut lht = match self.curr_tok().ty {
+            Let => self._let()?,
             True | False => self.bool(),
             Int => self.int(),
             Dec => self.dec(), 
@@ -110,9 +118,7 @@ impl Module {
             };
             
             if let Some((l_bp, ())) = postfix_bp(op.ty) { // Postfix
-                if l_bp < min_bp {
-                    break;
-                }
+                if l_bp < min_bp { break; }
                 self.i += 1;
 
                 lht = if op.ty == LSquare {
