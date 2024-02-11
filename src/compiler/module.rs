@@ -1,6 +1,7 @@
 use core::panic;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
+use std::sync::{Arc, Mutex};
 use std::{string::String, any::TypeId};
 use std::rc::Rc;
 use ahash::AHasher;
@@ -13,6 +14,7 @@ use self::logic::{plus, minus, star, slash, negate};
 use self::types::Type;
 
 use crate::FBOpCode::*;
+use super::Compiler;
 use super::token::TokenType;
 use super::{token::{Token, self, TokenType::*}, chunk::{Chunk, Const}};
 
@@ -24,11 +26,13 @@ type AHashMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 pub struct Module {
     id: Rc<String>,
     tokens: Vec<Token>, i: usize,
+
     imports: AHashMap<Rc<String>, Rc<String>>,
     items: Vec<Items>,
     panic_mode: bool,
     // TODO chunk is temporary, will return module result table
-    chunk: Chunk,
+    pub chunk: Option<Chunk>,
+    compiler: Option<Arc<Mutex<Compiler>>>,
 }
 
 struct Items {
@@ -38,12 +42,13 @@ struct Items {
 }
 
 impl Module {
-    pub fn new(tokens: Vec<Token>, id: Rc<String>) -> Self { Self { tokens, id, i: 0, imports:  AHashMap::default(), items: Vec::new(), chunk: Chunk::new(), panic_mode: false }}
+    pub fn new(tokens: Vec<Token>, id: Rc<String>, compiler: Arc<Mutex<Compiler>>) -> Self { Self { tokens, id, compiler: Some(compiler), i: 0, imports:  AHashMap::default(), items: Vec::new(), chunk: Some(Chunk::new()), panic_mode: false }}
     #[inline(always)]
     pub fn curr_tok(&mut self) -> &mut Token { &mut self.tokens[self.i] }
     
-    pub fn compile(mut self) -> Result<Chunk, Vec<PhoenixError>> {
+    pub fn compile(mut self) -> Result<Arc<Mutex<Compiler>>, Vec<PhoenixError>> {
         let mut errors = vec![];
+
         while self.curr_tok().ty != Eof {
             if self.panic_mode { // Panic Syncronization
                 if self.curr_tok().pos.1 != self.tokens[self.i + 1].pos.1 { self.i += 1 }
@@ -54,11 +59,16 @@ impl Module {
                 }}
                 self.panic_mode = false;
             }
+
             let err = self.loose_statement();
             if err.is_err() { errors.push(err.unwrap_err()); self.panic_mode = true; }
         }
 
-        if errors.is_empty() { Ok(self.chunk) } else { Err(errors) }
+        if errors.is_empty() { 
+            let compiler = self.compiler.take().unwrap();
+            compiler.lock().unwrap().modules.insert(self.id.clone(), self); 
+            Ok(compiler)
+        } else { Err(errors) }
     }
 
     pub fn loose_statement(&mut self) -> Result<(), PhoenixError> {
@@ -67,11 +77,11 @@ impl Module {
             let pos = self.tokens[self.i].pos;
             let ty = self.expression_parsing(0)?;
             match ty { Type::Void => return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: pos.0, col: pos.1, msg: String::from("print statement requires a non-void expression") }), _ => {} }
-            self.chunk.write_op(FBOpCode::OpPrint);
+            self.chunk.as_mut().unwrap().write_op(FBOpCode::OpPrint);
             return Ok(());
         }
         let ty = self.expression_parsing(0)?;
-        match ty { Type::Void => {} _ => self.chunk.write_op(FBOpCode::OpPop), }
+        match ty { Type::Void => {} _ => self.chunk.as_mut().unwrap().write_op(FBOpCode::OpPop), }
         Ok(())
     }
 
@@ -102,7 +112,7 @@ impl Module {
                 let rht_pos = self.curr_tok().pos;
                 let rhs = self.expression_parsing(r_bp)?;
                 self.i -= 1;
-                Self::operation(&mut self.chunk, None, (rhs, rht_pos), &self.tokens[tok_i])?
+                Self::operation(self.chunk.as_mut().unwrap(), None, (rhs, rht_pos), &self.tokens[tok_i])?
             }
             ty => unreachable!("{:?}", ty),
         };
@@ -139,7 +149,7 @@ impl Module {
                     let rht_pos = self.curr_tok().pos;
                     let rht = self.expression_parsing(r_bp)?;
                     let op = &self.tokens[op_i];
-                    Self::operation(&mut self.chunk, Some((lht, lht_pos)), (rht, rht_pos), op)?
+                    Self::operation(self.chunk.as_mut().unwrap(), Some((lht, lht_pos)), (rht, rht_pos), op)?
                 };
                 continue;
             }
@@ -151,25 +161,25 @@ impl Module {
     }
     
     #[inline(always)]
-    fn bool(&mut self) -> Type { let op = if self.curr_tok().ty == True { OpTrue } else { OpFalse }; self.chunk.write_op(op); Type::Bool }
+    fn bool(&mut self) -> Type { let op = if self.curr_tok().ty == True { OpTrue } else { OpFalse }; self.chunk.as_mut().unwrap().write_op(op); Type::Bool }
     fn int(&mut self) -> Type {
         let num = self.curr_tok().lexeme.take().unwrap().parse::<i64>().unwrap();
-        self.chunk.write_const(Const::Int(num));
+        self.chunk.as_mut().unwrap().write_const(Const::Int(num));
         Type::Int
     }
     fn dec(&mut self) -> Type {
         let num = self.curr_tok().lexeme.take().unwrap().parse::<f64>().unwrap();
-        self.chunk.write_const(Const::Dec(num.to_bits()));
+        self.chunk.as_mut().unwrap().write_const(Const::Dec(num.to_bits()));
         Type::Dec
     }
     fn string(&mut self) -> Type {
         let str = self.curr_tok().lexeme.take().unwrap();
-        self.chunk.write_const(Const::String(str));
+        self.chunk.as_mut().unwrap().write_const(Const::String(str));
         Type::Str
     }
     fn char(&mut self) -> Type {
         let char = self.curr_tok().lexeme.take().unwrap().chars().next().unwrap();
-        self.chunk.write_const(Const::Char(char));
+        self.chunk.as_mut().unwrap().write_const(Const::Char(char));
         Type::Char
     }
 

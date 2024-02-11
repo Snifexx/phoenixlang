@@ -16,8 +16,8 @@ pub enum Commands {
         #[arg(short, long)]
         scan: bool,
         
-        /// Must be a .phx file
-        file: PathBuf,
+        /// Must be a directory with a Feather.toml
+        project: PathBuf,
     },
 
     /// Execute either compiled flms file or compiles and runs a phx file
@@ -34,7 +34,7 @@ pub enum Commands {
         #[arg(short, long)]
         debug: bool,
 
-        /// Can be a .flms or .phx file
+        /// Can be a .flms or a directory with a Feather.toml
         file: PathBuf,
     }
 }

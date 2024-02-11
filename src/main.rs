@@ -9,15 +9,14 @@ mod cli;
 
 fn main() {
     let cli = PhoenixCli::parse();
-    let cmd = PhoenixCli::command();
 
     match cli.subcmd {
-        cli::Commands::Compile { scan, file } => compile_file(scan, file),
+        cli::Commands::Compile { scan, project } => compile(scan, project),
         cli::Commands::Run { scan, compiled, debug, file } => todo!(),
     }
 }
 
-fn compile_file(scan: bool, file: PathBuf) {
+fn compile(scan: bool, file: PathBuf) {
     if let Some(ext) = file.extension() {
         if ext != "phx" { 
             PhoenixCli::command().error(

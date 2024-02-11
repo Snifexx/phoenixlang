@@ -16,9 +16,16 @@ pub struct Vm {
     pub pc: u64,
     pub stack: Stack,
     pub str_intern: HashSet<Rc<String>, BuildHasherDefault<AHasher>>,
+    pub globals: HashMap<Rc<String>, Rc<RefCell<Value>>, BuildHasherDefault<AHasher>>
 }
 
 impl Vm {
+    pub fn str_intern(str_intern: &mut HashSet<Rc<String>, BuildHasherDefault<AHasher>>, str: &String) -> Rc<String> {
+        match str_intern.get(str) {
+            Some(a) => a.clone(),
+            None => { let a = Rc::new(str.clone()); str_intern.insert(a.clone()); a }
+        }
+    }
     pub fn run(mut self, debug_flag: bool) -> u8 {
         loop {
             let byte = self.chunk.code[self.pc as usize];

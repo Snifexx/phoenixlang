@@ -18,22 +18,20 @@ const IDENTIFIER_MAX_LENGTH: usize = 32;
 
 //#[cfg(test)]
 mod test {
-    use std::{rc::Rc, mem, collections::HashSet};
+    use std::{rc::Rc, mem, collections::HashSet, str::FromStr, path::PathBuf};
 
+
+    use clap::error::ErrorKind;
+    use toml::Table;
 
     use crate::{compiler::{scanner::Scanner, module::Module, Compiler}, debug::debug_chunk, error::PhoenixError, vm::{Vm, value::Value}};
 
     #[test]
     pub fn test() -> Result<(), Vec<PhoenixError>> {
-        let src = 
-r#"
-print "sesso" + 1 
-print "sesso1" + 8
-"#;
 
-        let chunk = Compiler::compile_string(src.to_string())?;
+        let chunk = Compiler::compile(PathBuf::from(r"/home/matteo/rust/phoenixlang/test/"))?;
         debug_chunk(&chunk);
-        let vm = Vm { chunk, pc: 0, stack: vec![], str_intern: HashSet::default() }.run(false);
+        let vm = Vm { chunk, pc: 0, stack: vec![], str_intern: HashSet::default(), globals: Default::default() }.run(false);
         Ok(())
     }
 
