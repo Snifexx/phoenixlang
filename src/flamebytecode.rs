@@ -130,7 +130,12 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
             let name = Vm::str_intern(&mut vm.str_intern, name); let value = vm.stack.pop().unwrap();
             vm.globals.insert(name, value);
         }
-        FBOpCode::OpGlobGet => todo!(),
+        FBOpCode::OpGlobGet => {
+            let name = &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize];
+            let name = if let Const::String(str) = name { str } else { unreachable!() };
+            let name = Vm::str_intern(&mut vm.str_intern, name);
+            vm.stack.push(vm.globals[&name].clone());
+        }
     }
     None
 }

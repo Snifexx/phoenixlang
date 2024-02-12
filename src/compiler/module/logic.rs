@@ -1,6 +1,6 @@
-use crate::{compiler::{token::{Token, TokenType}, chunk::Chunk}, error::{PhoenixError, CompErrID}, flamebytecode::FBOpCode};
+use crate::{compiler::{token::{Token, TokenType}, chunk::{Chunk, Const}, Compiler}, error::{PhoenixError, CompErrID}, flamebytecode::FBOpCode};
 
-use super::{types::Type, Module};
+use super::{types::{Type, parse_type}, Module};
 
 
 #[inline(always)]
@@ -62,26 +62,32 @@ impl Module {
     pub fn _let(&mut self) -> Result<Type, PhoenixError> {
         self.i += 1;
         let name = self.tokens[self.i].lexeme.take().ok_or_else(|| PhoenixError::Compile { id: CompErrID::InvalidSymbol, row: self.curr_tok().pos.0, col: self.curr_tok().pos.1, 
-            msg: format!("No symbol name was provided") })?;
-        let pos = self.curr_tok().pos;
-        let req_ty: Option<Type> = if self.curr_tok().ty == TokenType::Colon {
+            msg: format!("No symbol name was provided") })?[1..].to_string();
+        let (req_ty, pos): (Option<Type>, (u16, u16)) = if self.curr_tok().ty == TokenType::Colon {
             self.i += 1;
-            // type
-            None
-        } else { None };
+            let pos = self.curr_tok().pos;
+            (Some(parse_type(self)?), pos)
+        } else { (None, (0, 0)) };
 
+        self.i += 1;
         self.consume(TokenType::Eq);
-
+        let pos = if pos == (0, 0) { self.curr_tok().pos } else { pos };
         let ty = self.expression_parsing(0)?;
         
         let ty = match (req_ty, ty) {
+            (None, Type::Unknown) => return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: pos.0, col: pos.1,
+                msg: format!("Type cannot be inferred, must be specified") }),
             (None, ty) => ty,
             (Some(req_ty), ty) if req_ty == ty => ty,
             _ => return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: pos.0, col: pos.1,
                 msg: format!("Expected value of type '{}' as specified, type '{}' was instead provided", req_ty.unwrap(), ty) }),
         };
 
-        // Declare variable
+        let glob = Compiler::intern_str_ref(&mut self.compiler.as_mut().unwrap().lock().unwrap().interned_str, &name);
+        self.globals.insert(glob, ty);
+        let i = self.chunk.as_mut().unwrap().add_get_const(Const::String(name));
+        self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobSet);
+        self.chunk.as_mut().unwrap().write(&i.to_le_bytes()[0..3]);
         Ok(Type::Void)
     }
 }

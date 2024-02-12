@@ -28,21 +28,25 @@ pub struct Module {
     tokens: Vec<Token>, i: usize,
 
     imports: AHashMap<Rc<String>, Rc<String>>,
-    items: Vec<Items>,
+    funcs: AHashMap<Rc<String>, Funcs>,
+    globals: AHashMap<Rc<String>, Type>,
     panic_mode: bool,
     // TODO chunk is temporary, will return module result table
     pub chunk: Option<Chunk>,
     compiler: Option<Arc<Mutex<Compiler>>>,
 }
 
-struct Items {
+struct Funcs {
     name: Rc<String>,
     code: Chunk,
     dependencies: HashSet<Rc<String>, BuildHasherDefault<AHasher>>,
 }
 
 impl Module {
-    pub fn new(tokens: Vec<Token>, id: Rc<String>, compiler: Arc<Mutex<Compiler>>) -> Self { Self { tokens, id, compiler: Some(compiler), i: 0, imports:  AHashMap::default(), items: Vec::new(), chunk: Some(Chunk::new()), panic_mode: false }}
+    pub fn new(tokens: Vec<Token>, id: Rc<String>, compiler: Arc<Mutex<Compiler>>) -> Self { 
+        Self { tokens, id, compiler: Some(compiler), i: 0, imports:  AHashMap::default(), funcs: Default::default(), globals: Default::default(), chunk: Some(Chunk::new()), panic_mode: false }
+    }
+
     #[inline(always)]
     pub fn curr_tok(&mut self) -> &mut Token { &mut self.tokens[self.i] }
     
@@ -88,7 +92,7 @@ impl Module {
    pub fn expression_parsing(&mut self, min_bp: u8) -> Result<Type, PhoenixError> {
         let lht_pos = self.curr_tok().pos;
         let mut lht = match self.curr_tok().ty {
-            Let => self._let()?,
+            Let => return self._let(),
             True | False => self.bool(),
             Int => self.int(),
             Dec => self.dec(), 

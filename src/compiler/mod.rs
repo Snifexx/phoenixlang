@@ -48,6 +48,8 @@ impl Compiler {
 
             let mut compiler = Compiler::new();
             let id = Compiler::intern_str_ref(&mut compiler.interned_str, &name);
+
+
             let compiler = Module::new(
                 Scanner::new(fs::read_to_string(main).map_err(|err| config_err!("{err}"))?).scan().map_err(|err| vec![err])?, 
                 id,
@@ -55,8 +57,8 @@ impl Compiler {
             ).compile()?;
             let mut compiler = compiler.lock().unwrap();
 
-            let id = &Compiler::intern_str(&mut (*compiler).interned_str, name);
-            let chunk = compiler.modules.get_mut(&*id).unwrap().chunk.take().unwrap();
+            let id = Compiler::intern_str(&mut (*compiler).interned_str, name);
+            let chunk = compiler.modules.get_mut(&id).unwrap().chunk.take().unwrap();
             return Ok(chunk.build());
         }
 

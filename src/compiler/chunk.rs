@@ -53,13 +53,16 @@ impl Chunk {
     pub fn write_op(&mut self, byte: FBOpCode) { self.code.push(byte as u8) }
     pub fn write_const(&mut self, constant: Const) {
         self.write_op(FBOpCode::OpConstant);
-        let ConstPool::Compiler { hash, len } = &mut self.consts else { unreachable!() }; 
-        let i = if let Some(i) = hash.get(&constant).cloned() { i } else { 
-            let r = *len; *len += 1;
-            if (*len > 0xFFFFFF) { panic!("Too much constants. Report this error to us.")} r
-        };
-        hash.insert(constant, i);
+        let i = self.add_get_const(constant);
         self.write(&i.to_le_bytes()[..3]);
+    }
+    pub fn add_get_const(&mut self, constant: Const) -> u32 {
+        let ConstPool::Compiler { hash, len } = &mut self.consts else { unreachable!() }; 
+        if let Some(i) = hash.get(&constant) { *i } else { 
+            if (*len >= 0xFFFFFF) { panic!("Too much constants. Report this error to us.")}
+            let i = *len; *len += 1;
+            hash.insert(constant, i); i
+        }
     }
 }
 
