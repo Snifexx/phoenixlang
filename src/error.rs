@@ -31,4 +31,5 @@ pub enum CompErrID {
     IdentifierTooLong, 
     // Compiler errors
     TypeError, InvalidSymbol,
+    MissingGlobalSymbol,
 }

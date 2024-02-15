@@ -54,18 +54,15 @@ impl Module {
         let mut errors = vec![];
 
         while self.curr_tok().ty != Eof {
-            if self.panic_mode { // Panic Syncronization
-                if self.curr_tok().pos.1 != self.tokens[self.i + 1].pos.1 { self.i += 1 }
-                else if self.tokens[self.i].lexeme.as_ref().is_some_and(|x| x == "print") {}
-                else { match self.curr_tok().ty {
-                    Let => {}
-                    _ => { self.i += 1; continue; }
-                }}
-                self.panic_mode = false;
-            }
-
             let err = self.loose_statement();
-            if err.is_err() { errors.push(err.unwrap_err()); self.panic_mode = true; }
+            if err.is_err() { 
+                errors.push(err.unwrap_err());
+                loop {
+                    let end_statement = self.curr_tok().pos.1 != self.tokens[self.i + 1].pos.1 || self.curr_tok().ty == Eof;
+                    self.i += 1;
+                    if end_statement { break; }
+                }
+            }
         }
 
         if errors.is_empty() { 
@@ -89,7 +86,7 @@ impl Module {
         Ok(())
     }
 
-   pub fn expression_parsing(&mut self, min_bp: u8) -> Result<Type, PhoenixError> {
+    pub fn expression_parsing(&mut self, min_bp: u8) -> Result<Type, PhoenixError> {
         let lht_pos = self.curr_tok().pos;
         let mut lht = match self.curr_tok().ty {
             Let => return self._let(),
@@ -97,6 +94,7 @@ impl Module {
             Int => self.int(),
             Dec => self.dec(), 
             String => self.string(),
+            Identifier => { let ty = self.variable()?; if Type::Void == ty { return Ok(ty); } else { ty } }
             Plus => {
                 self.i += 1;
                 let ret_ty = self.expression_parsing(9)?;
@@ -164,28 +162,56 @@ impl Module {
         Ok(lht)
     }
     
-    #[inline(always)]
-    fn bool(&mut self) -> Type { let op = if self.curr_tok().ty == True { OpTrue } else { OpFalse }; self.chunk.as_mut().unwrap().write_op(op); Type::Bool }
-    fn int(&mut self) -> Type {
-        let num = self.curr_tok().lexeme.take().unwrap().parse::<i64>().unwrap();
-        self.chunk.as_mut().unwrap().write_const(Const::Int(num));
-        Type::Int
+   #[inline(always)]
+   fn bool(&mut self) -> Type { let op = if self.curr_tok().ty == True { OpTrue } else { OpFalse }; self.chunk.as_mut().unwrap().write_op(op); Type::Bool }
+   fn int(&mut self) -> Type {
+       let num = self.curr_tok().lexeme.take().unwrap().parse::<i64>().unwrap();
+       self.chunk.as_mut().unwrap().write_const(Const::Int(num));
+       Type::Int
+   }
+   fn dec(&mut self) -> Type {
+       let num = self.curr_tok().lexeme.take().unwrap().parse::<f64>().unwrap();
+       self.chunk.as_mut().unwrap().write_const(Const::Dec(num.to_bits()));
+       Type::Dec
+   }
+   fn string(&mut self) -> Type {
+       let str = self.curr_tok().lexeme.take().unwrap();
+       self.chunk.as_mut().unwrap().write_const(Const::String(str));
+       Type::Str
+   }
+   fn char(&mut self) -> Type {
+       let char = self.curr_tok().lexeme.take().unwrap().chars().next().unwrap();
+       self.chunk.as_mut().unwrap().write_const(Const::Char(char));
+       Type::Char
+   }
+   fn variable(&mut self) -> Result<Type, PhoenixError> {
+       let name = self.curr_tok().lexeme.take().unwrap()[1..].to_owned();
+       let pos = self.curr_tok().pos;
+
+        if !self.globals.contains_key(&name) { return Err(PhoenixError::Compile { id: CompErrID::MissingGlobalSymbol, row: pos.0, col: pos.1, msg: format!("Global symbol '{name}' not found") }) }
+
+        let ty = self.globals[&name];
+
+        // If it's a setter (I.E. 'symbol [=, +=, -=, *=, /=]')
+        if ![Eq, PlusEq, MinusEq, StarEq, SlashEq].contains(&self.tokens[self.i + 1].ty) {
+            self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobGet);
+            let name_const = self.chunk.as_mut().unwrap().add_get_const(Const::String(name));
+            self.chunk.as_mut().unwrap().write(&name_const.to_le_bytes()[..3]);
+            Ok(ty)
+        } else {
+            self.i += 2;
+            let pos = self.curr_tok().pos;
+            let expr_ty = self.expression_parsing(0)?;
+
+            if expr_ty != ty { return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: pos.0, col: pos.1,
+                msg: format!("Cannot assign value of type '{expr_ty}' to symbol of type '{ty}'") }); }
+            self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobSet);
+            let name_const = self.chunk.as_mut().unwrap().add_get_const(Const::String(name));
+            self.chunk.as_mut().unwrap().write(&name_const.to_le_bytes()[..3]);
+            Ok(Type::Void)
+        }
     }
-    fn dec(&mut self) -> Type {
-        let num = self.curr_tok().lexeme.take().unwrap().parse::<f64>().unwrap();
-        self.chunk.as_mut().unwrap().write_const(Const::Dec(num.to_bits()));
-        Type::Dec
-    }
-    fn string(&mut self) -> Type {
-        let str = self.curr_tok().lexeme.take().unwrap();
-        self.chunk.as_mut().unwrap().write_const(Const::String(str));
-        Type::Str
-    }
-    fn char(&mut self) -> Type {
-        let char = self.curr_tok().lexeme.take().unwrap().chars().next().unwrap();
-        self.chunk.as_mut().unwrap().write_const(Const::Char(char));
-        Type::Char
-    }
+
 
     fn operation(chunk: &mut Chunk, lht: Option<(Type, (u16, u16))>, rht: (Type, (u16, u16)), op: &Token) -> Result<Type, PhoenixError> {
         match op.ty {
