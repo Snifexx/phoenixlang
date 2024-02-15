@@ -124,7 +124,8 @@ impl Module {
             let op_i = self.i;
             if self.tokens[self.i - 1].pos.0 != self.curr_tok().pos.0 { break; }
             let op = match self.curr_tok().ty {
-                RParen | Eof => break,
+                SemiColon => { self.i += 1; break; }
+                RParen | Eof  => break,
                 op @ (Plus | Minus | Star | Slash) => &self.tokens[op_i], 
                 op => unreachable!("{op:?}"),
             };
@@ -199,14 +200,21 @@ impl Module {
             self.chunk.as_mut().unwrap().write(&name_const.to_le_bytes()[..3]);
             Ok(ty)
         } else {
+            let op_i = self.i + 1;
+            let is_eq = self.tokens[op_i].ty == Eq;
             self.i += 2;
-            let pos = self.curr_tok().pos;
+            let name_const = self.chunk.as_mut().unwrap().add_get_const(Const::String(name));
+
+            if !is_eq { self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobGet); self.chunk.as_mut().unwrap().write(&name_const.to_le_bytes()[..3]); }
+
+            let expr_pos = self.curr_tok().pos;
             let expr_ty = self.expression_parsing(0)?;
 
-            if expr_ty != ty { return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: pos.0, col: pos.1,
+            if !is_eq { Self::operation(self.chunk.as_mut().unwrap(), Some((ty, pos)), (expr_ty, expr_pos), &self.tokens[op_i])?; }
+
+            if expr_ty != ty && is_eq { return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: expr_pos.0, col: expr_pos.1,
                 msg: format!("Cannot assign value of type '{expr_ty}' to symbol of type '{ty}'") }); }
             self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobSet);
-            let name_const = self.chunk.as_mut().unwrap().add_get_const(Const::String(name));
             self.chunk.as_mut().unwrap().write(&name_const.to_le_bytes()[..3]);
             Ok(Type::Void)
         }
@@ -215,10 +223,10 @@ impl Module {
 
     fn operation(chunk: &mut Chunk, lht: Option<(Type, (u16, u16))>, rht: (Type, (u16, u16)), op: &Token) -> Result<Type, PhoenixError> {
         match op.ty {
-            Plus => plus(chunk, lht.unwrap(), rht, op),
-            Minus => if lht.is_some() { minus(chunk, lht.unwrap(), rht, op) } else { negate(chunk, rht, op) }
-            Star => star(chunk, lht.unwrap(), rht, op),
-            Slash => slash(chunk, lht.unwrap(), rht, op),
+            Plus | PlusEq => plus(chunk, lht.unwrap(), rht, op),
+            Minus | MinusEq => if lht.is_some() { minus(chunk, lht.unwrap(), rht, op) } else { negate(chunk, rht, op) }
+            Star | StarEq => star(chunk, lht.unwrap(), rht, op),
+            Slash | SlashEq => slash(chunk, lht.unwrap(), rht, op),
             _ => todo!()
         }
     }

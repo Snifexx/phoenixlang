@@ -99,7 +99,7 @@ impl Scanner {
                 '~' => res.push(Token::make(&self, Tilde, None)),
 
                 '.' => res.push(Token::make(&self, Dot, None)),
-                '+' => res.push(Token::make(&self, Plus, None)),
+                '+' => res.push(self.make_double('=', Plus, PlusEq)),
                 '-' => res.push(
                     match self.peek { 
                         Some('=') => { let a = Token::make(&self, MinusEq, None); self.next(); a }
