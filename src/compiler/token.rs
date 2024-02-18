@@ -8,7 +8,7 @@ use crate::compiler::scanner::Scanner;
 #[derive(Debug)]
 pub struct Token {
     pub ty: TokenType,
-    pub lexeme: Option<String>,
+    pub lexeme: Option<Box<str>>,
     pub pos: (u16, u16)
 }
 
@@ -24,7 +24,7 @@ pub enum TokenType {
 
     Ampersand, Caret, Bar, Pipe,
     Hash, Dollar, Tilde, Backtick,
-    IndentUp, IndentDown,
+    IndentUp, IndentDown, LineJoin,
 
     Bang, BangEq,
     Eq, EqEq, ArrowEq,
@@ -41,6 +41,14 @@ pub enum TokenType {
 }
 
 impl Token {
-    pub fn make(scanner: &Scanner, ty: TokenType, lexeme: Option<String>) -> Token { Token { ty, lexeme, pos: (scanner.row, scanner.col) }}
-    pub fn make_pos(ty: TokenType, lexeme: Option<String>, pos: (u16, u16)) -> Token { Token { ty, lexeme, pos }}
+    pub fn make(scanner: &Scanner, ty: TokenType, lexeme: Option<&str>) -> Token { Token { ty, lexeme: lexeme.map(|str| str.into()), pos: (scanner.row, scanner.col) }}
+    pub fn make_pos(ty: TokenType, lexeme: Option<&str>, pos: (u16, u16)) -> Token { Token { ty, lexeme: lexeme.map(|str| str.into()), pos } }
 }
+
+
+
+
+
+
+
+

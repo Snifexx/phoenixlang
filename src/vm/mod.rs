@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc, usize, collections::{HashMap, HashSet}, hash::BuildHasherDefault};
 use ahash::AHasher;
 
-use crate::{compiler::chunk::{Chunk, Const}, flamebytecode::{FBOpCode, debug, run}};
+use crate::{compiler::chunk::{Chunk, Const}, flamebytecode::{FBOpCode, debug, run}, strings::{InternStrSync, InternStr}};
 use self::value::Value;
 
 pub mod value;
@@ -15,17 +15,11 @@ pub struct Vm {
     pub chunk: Chunk,
     pub pc: u64,
     pub stack: Stack,
-    pub str_intern: HashSet<Rc<String>, BuildHasherDefault<AHasher>>,
-    pub globals: HashMap<Rc<String>, Rc<RefCell<Value>>, BuildHasherDefault<AHasher>>
+    pub strings: InternStr,
+    pub globals: HashMap<Rc<str>, Rc<RefCell<Value>>, BuildHasherDefault<AHasher>>
 }
 
 impl Vm {
-    pub fn str_intern(str_intern: &mut HashSet<Rc<String>, BuildHasherDefault<AHasher>>, str: &String) -> Rc<String> {
-        match str_intern.get(str) {
-            Some(a) => a.clone(),
-            None => { let a = Rc::new(str.clone()); str_intern.insert(a.clone()); a }
-        }
-    }
     pub fn run(mut self, debug_flag: bool) -> u8 {
         loop {
             let byte = self.chunk.code[self.pc as usize];

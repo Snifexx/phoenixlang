@@ -57,7 +57,7 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
                 Const::Int(v) => Value::Int(*v),
                 Const::Dec(v) => Value::Dec(f64::from_bits(*v)),
                 Const::String(v) => {
-                    let v = Vm::str_intern(&mut vm.str_intern, v);
+                    let v = vm.strings.intern_str(v);
                     Value::Str(v)
                 },
                 Const::Char(c) => Value::Char(*c),
@@ -72,13 +72,13 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
                 (Value::Int(int_f), Value::Int(int_s)) => push!(Value::Int(*int_f + *int_s)),
                 (Value::Dec(dec_f), Value::Dec(dec_s)) => push!(Value::Dec(*dec_f + *dec_s)),
                 (Value::Str(str), Value::Str(to_concat)) => {
-                    let mut new_str = (**str).clone(); new_str.push_str(to_concat);
-                    let v = Vm::str_intern(&mut vm.str_intern, &new_str);
+                    let mut new_str = String::from(&**str); new_str.push_str(to_concat);
+                    let v = vm.strings.intern_str(&*new_str);
                     push!(Value::Str(v));
                 }
                 (Value::Str(str), Value::Char(to_concat)) => {
-                    let mut new_str = (**str).clone(); new_str.push(*to_concat);
-                    let v = Vm::str_intern(&mut vm.str_intern, &new_str);
+                    let mut new_str = String::from(&**str); new_str.push(*to_concat);
+                    let v = vm.strings.intern_str(&*new_str);
                     push!(Value::Str(v));
                 }
                 (_, _) => unreachable!()
@@ -127,13 +127,14 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
         FBOpCode::OpGlobSet => {
             let name = &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize];
             let name = if let Const::String(str) = name { str } else { unreachable!() };
-            let name = Vm::str_intern(&mut vm.str_intern, name); let value = vm.stack.pop().unwrap();
+            let name = vm.strings.intern_str(name);
+            let value = vm.stack.pop().unwrap();
             vm.globals.insert(name, value);
         }
         FBOpCode::OpGlobGet => {
             let name = &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize];
             let name = if let Const::String(str) = name { str } else { unreachable!() };
-            let name = Vm::str_intern(&mut vm.str_intern, name);
+            let name = vm.strings.intern_str(name);
             vm.stack.push(vm.globals[&name].clone());
         }
     }

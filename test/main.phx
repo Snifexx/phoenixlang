@@ -1,7 +1,9 @@
 let a = "sesso"
-print a
-print '\n'
+print a; print '\n'
+
 a += '1'; a += '2'; a += '3'
-let b = 4; b -= 1
+
+let b = 4 + 1  + 1
+
 print b; print '\n'
 print a

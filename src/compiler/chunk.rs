@@ -18,7 +18,7 @@ pub enum ConstPool {
 pub enum Const {
     Int(i64),
     Dec(u64),
-    String(String),
+    String(Box<str>),
     Char(char)
 }
 

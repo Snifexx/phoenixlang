@@ -1,9 +1,9 @@
-use std::{rc::Rc, collections::{HashMap, HashSet}, hash::BuildHasherDefault, path::PathBuf, str::FromStr, fs, sync::{Arc, Mutex}, borrow::BorrowMut};
+use std::{rc::Rc, collections::{HashMap, HashSet}, hash::BuildHasherDefault, path::PathBuf, str::FromStr, fs, sync::{Arc, Mutex, mpsc::{self, Sender}}, borrow::BorrowMut, thread::{self, JoinHandle}};
 use ahash::AHasher;
 use clap::error::ErrorKind;
 use toml::Table;
 
-use crate::{error::{PhoenixError, CompErrID}, compiler};
+use crate::{error::{PhoenixError, CompErrID}, compiler, strings::InternStrSync};
 
 use self::{module::Module, scanner::Scanner, chunk::Chunk};
 
@@ -15,23 +15,18 @@ pub mod module;
 type AHashMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 
 pub struct Compiler {
-    modules: AHashMap<Rc<String>, Module>,
-    interned_str: HashSet<Rc<String>, BuildHasherDefault<AHasher>>,
+    modules: AHashMap<Arc<str>, Module>,
+    strings: InternStrSync,
+    transmitter: Option<Sender<JoinHandle<Result<(), Vec<PhoenixError>>>>>
 }
 
 impl Compiler {
-    fn intern_str_ref(interned: &mut HashSet<Rc<String>, BuildHasherDefault<AHasher>>, str: &String) -> Rc<String> {
-        match interned.get(str) { Some(str) => str.clone(), None => {interned.insert(Rc::new(str.clone())); interned.get(str).unwrap().clone()} } }
-    fn intern_str(interned: &mut HashSet<Rc<String>, BuildHasherDefault<AHasher>>, str: String) -> Rc<String> {
-        match interned.get(&str) { Some(str) => str.clone(), None => { let rc = Rc::new(str); interned.insert(rc.clone()); rc } } }
+    pub fn new(intern_str: InternStrSync) -> Self { Self { modules: AHashMap::default(), strings: intern_str, transmitter: None }}
 
-    pub fn new() -> Self { Self { modules: AHashMap::default(), interned_str: Default::default() }}
-
-    pub fn compile(path: PathBuf) -> Result<Chunk, Vec<PhoenixError>> {//Temp chunk    
+    pub fn compile(path: PathBuf) -> Result<Chunk, Vec<PhoenixError>> {// Todo Temp chunk    
         macro_rules! config_err { ($($arg:tt)*) => { vec![PhoenixError::Config(format!($($arg)*))] }; }
 
         let feather_toml = path.join("Feather.toml");
-        println!("{}", feather_toml.display());
         if !path.is_dir() || !feather_toml.is_file() { 
             return Err(vec![PhoenixError::Cli(ErrorKind::InvalidValue, format!("Given project must be a directory containing a Feather.toml"))]) }
 
@@ -46,18 +41,36 @@ impl Compiler {
 
             let main = path.join("main.phx"); if !main.is_file() { return Err(config_err!("Missing main.phx in project directory")); }
 
-            let mut compiler = Compiler::new();
-            let id = Compiler::intern_str_ref(&mut compiler.interned_str, &name);
+            let mut intern_str = InternStrSync::new();
 
+            let id = intern_str.intern_str(&name);
+            let mut compiler = Arc::new(Mutex::new(Compiler::new(intern_str)));
 
-            let compiler = Module::new(
-                Scanner::new(fs::read_to_string(main).map_err(|err| config_err!("{err}"))?).scan().map_err(|err| vec![err])?, 
-                id,
-                Arc::new(Mutex::new(compiler))
-            ).compile()?;
-            let mut compiler = compiler.lock().unwrap();
+            let (tx, rx) = mpsc::channel();
+            
+            let txx = tx.clone();
+            let compiler_two = compiler.clone();
+            let idd = id.clone();
+            let main_thread = thread::spawn(move || {
+                let mut module = Module::new(
+                    Scanner::new(fs::read_to_string(main).map_err(|err| config_err!("{err}"))?).scan().map_err(|err| vec![err])?,
+                    idd.clone(),
+                    compiler_two.clone());
+                module.compile(txx)?;
 
-            let id = Compiler::intern_str(&mut (*compiler).interned_str, name);
+                let mut compiler_two = compiler_two.lock().unwrap();
+                compiler_two.modules.insert(idd, module);
+                Ok(())
+            });
+            
+            tx.send(main_thread);
+            drop(tx);
+            
+            for thread in rx {
+                thread.join().unwrap()?;
+            }
+            
+            let mut compiler = Arc::into_inner(compiler).unwrap().into_inner().unwrap();
             let chunk = compiler.modules.get_mut(&id).unwrap().chunk.take().unwrap();
             return Ok(chunk.build());
         }

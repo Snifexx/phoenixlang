@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{compiler::{token::{Token, TokenType}, chunk::{Chunk, Const}, Compiler}, error::{PhoenixError, CompErrID}, flamebytecode::FBOpCode};
 
 use super::{types::{Type, parse_type}, Module};
@@ -61,8 +63,8 @@ impl Module {
 
     pub fn _let(&mut self) -> Result<Type, PhoenixError> {
         self.i += 1;
-        let name = self.tokens[self.i].lexeme.take().ok_or_else(|| PhoenixError::Compile { id: CompErrID::InvalidSymbol, row: self.curr_tok().pos.0, col: self.curr_tok().pos.1, 
-            msg: format!("No symbol name was provided") })?[1..].to_string();
+        let name = &self.tokens[self.i].lexeme.take().ok_or_else(|| PhoenixError::Compile { id: CompErrID::InvalidSymbol, row: self.curr_tok().pos.0, col: self.curr_tok().pos.1, 
+            msg: format!("No symbol name was provided") })?[1..];
         let (req_ty, pos): (Option<Type>, (u16, u16)) = if self.curr_tok().ty == TokenType::Colon {
             self.i += 1;
             let pos = self.curr_tok().pos;
@@ -83,9 +85,13 @@ impl Module {
                 msg: format!("Expected value of type '{}' as specified, type '{}' was instead provided", req_ty.unwrap(), ty) }),
         };
 
-        let glob = Compiler::intern_str_ref(&mut self.compiler.as_mut().unwrap().lock().unwrap().interned_str, &name);
+        let glob = { 
+            let mut lock = self.compiler.as_mut().unwrap().lock().unwrap();
+            lock.strings.intern_str(name)
+        };
+        
         self.globals.insert(glob, ty);
-        let i = self.chunk.as_mut().unwrap().add_get_const(Const::String(name));
+        let i = self.chunk.as_mut().unwrap().add_get_const(Const::String(name.into()));
         self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobSet);
         self.chunk.as_mut().unwrap().write(&i.to_le_bytes()[0..3]);
         Ok(Type::Void)

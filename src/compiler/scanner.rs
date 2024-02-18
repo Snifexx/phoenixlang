@@ -65,6 +65,7 @@ impl Scanner {
 
             match c {
                 '\n' => {
+                    if res.last().unwrap().ty == LineJoin { continue; }
                     let mut spaces = 0;
                     while self.peek.is_some_and(|x| x == ' ') { spaces += 1; next_break!() }
                     let new_indent = spaces / 4; 
@@ -102,8 +103,8 @@ impl Scanner {
                 '+' => res.push(self.make_double('=', Plus, PlusEq)),
                 '-' => res.push(
                     match self.peek { 
-                        Some('=') => { let a = Token::make(&self, MinusEq, None); self.next(); a }
-                        Some('>') => { let a = Token::make(&self, Arrow, None); self.next(); a }
+                        Some('=') => { let mut a = Token::make(&self, MinusEq, None); a.pos.1 -= 1; self.next(); a }
+                        Some('>') => { let mut a = Token::make(&self, Arrow, None); a.pos.1 -= 1; self.next(); a }
                         _ => Token::make(&self, Minus, None),
                     }),
                 '/' => res.push(self.make_double('=', Slash, SlashEq)),
@@ -116,8 +117,8 @@ impl Scanner {
                 '!' => res.push(self.make_double('=', Bang, BangEq)),
                 '=' => res.push(
                     match self.peek { 
-                        Some('=') => { let a = Token::make(&self, EqEq, None); self.next(); a }
-                        Some('>') => { let a = Token::make(&self, ArrowEq, None); self.next(); a }
+                        Some('=') => { let mut a = Token::make(&self, EqEq, None); a.pos.1 -= 1; self.next(); a }
+                        Some('>') => { let mut a = Token::make(&self, ArrowEq, None); a.pos.1 -= 1; self.next(); a }
                         _ => Token::make(&self, Eq, None),
                     }),
                 '>' => res.push(self.make_double('=', More, MoreEq)),
@@ -126,6 +127,7 @@ impl Scanner {
                 '"' => self.string(&mut res)?,
                 '\'' => self.char(&mut res)?,
                 '`' => res.push(Token::make(&self, Backtick, None)),
+                '\\' => res.push(Token::make(&self, LineJoin, None)),
                 c if c.is_ascii_digit() => self.number(&mut res, c),
                 c if c.is_ascii_alphabetic() || c == '_' => self.identifier(&mut res, c, &keywords)?,
                 _ => return Err(PhoenixError::Compile { id: CompErrID::InvalidCharacter, row: self.row, col: self.col, msg: format!("Invalid character {c} at {}::{}", self.row, self.col) })
@@ -151,7 +153,7 @@ impl Scanner {
             str.push(c);
             if c == '\n' { let skip = self.indent as u32 * 4; for _ in 0..skip { next_string!()?;}}
         }
-        res.push(Token::make_pos(String, Some(str), pos));
+        res.push(Token::make_pos(String, Some(&*str), pos));
         Ok(())
     }
 
@@ -171,7 +173,7 @@ impl Scanner {
 
         self.expect_char('\'')?;
 
-        res.push(Token::make_pos(Char, Some(String::from(c)), pos));
+        res.push(Token::make_pos(Char, Some(c.encode_utf8(&mut [0])), pos));
         Ok(())
     }
 
@@ -189,7 +191,7 @@ impl Scanner {
             str.push(c);
             self.next();
         }
-        res.push(Token::make_pos(if dot { Dec } else { Int }, Some(str), pos));
+        res.push(Token::make_pos(if dot { Dec } else { Int }, Some(&*str), pos));
     }
     
     fn identifier(&mut self, res: &mut Vec<Token>, c: char, keywords: &AHashMap<&'static str, TokenType>) -> Result<(), PhoenixError> {
@@ -213,7 +215,8 @@ impl Scanner {
         }
         
         let is_keyword = if can_be_type { keywords.get(&*str) } else { None };
-        res.push(Token::make_pos(if is_keyword.is_some() { *is_keyword.unwrap() } else { Identifier }, if is_keyword.is_none() { Some(format!("{}{str}", can_be_type as u8)) } else { None }, pos));
+        let str = format!("{}{str}", can_be_type as u8);
+        res.push(Token::make_pos(if is_keyword.is_some() { *is_keyword.unwrap() } else { Identifier }, if is_keyword.is_none() { Some(&str) } else { None }, pos));
         Ok(())
     }
 }

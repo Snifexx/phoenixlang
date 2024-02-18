@@ -8,7 +8,7 @@ pub enum Value {
     Bool(bool),
     Int(i64),
     Dec(f64),
-    Str(Rc<String>),
+    Str(Rc<str>),
     Char(char),
 }
 
