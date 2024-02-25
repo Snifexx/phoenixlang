@@ -160,6 +160,8 @@ impl Module {
             if let Some((l_bp, r_bp)) = infix_bp(op.ty) { // Infix
                 if l_bp < min_bp { break; }
                 self.i += 1;
+                
+                while self.curr_tok().ty == IndentUp || self.curr_tok().ty == IndentDown { self.i += 1; }
 
                 lht = {
                     let rht_pos = self.curr_tok().pos;

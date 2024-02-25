@@ -1,22 +1,33 @@
-use std::{cell::RefCell, rc::Rc, usize, collections::{HashMap, HashSet}, hash::BuildHasherDefault};
+use std::{cell::RefCell, rc::Rc, usize, collections::{HashMap, HashSet}, hash::BuildHasherDefault, ops::DerefMut, ops::Deref, mem};
 use ahash::AHasher;
 
-use crate::{compiler::chunk::{Chunk, Const}, flamebytecode::{FBOpCode, debug, run}, strings::{InternStrSync, InternStr}};
+use crate::{compiler::chunk::{Chunk, Const}, flamebytecode::{FBOpCode, debug, run}, strings::{InternStrSync, InternStr}, STACK_LENGTH};
 use self::value::Value;
 
 pub mod value;
 
-pub type Stack = Vec<Rc<RefCell<Value>>>;
+#[derive(Debug)]
+pub struct Stack { 
+    array: [Value; STACK_LENGTH],
+    top: usize
+}
 
-pub trait Stacktrait { fn push_val(&mut self, value: Value); } 
-impl Stacktrait for Stack { fn push_val(&mut self, value: Value) { self.push(Rc::new(RefCell::new(value))) }}
+
+impl Deref for Stack { type Target = [Value]; fn deref(&self) -> &Self::Target { &self.array }}
+impl DerefMut for Stack { fn deref_mut(&mut self) -> &mut Self::Target { &mut self.array }}
+
+impl Stack {
+    pub fn new() -> Self { Self { array: [Value::default()], top: 0 } }
+    pub fn push(&mut self, value: Value) { self.array[self.top] = value; self.top += 1; }
+    pub fn pop(&mut self) -> Value { self.top -= 1; mem::take(&mut self.array[self.top + 1]) }
+}
 
 pub struct Vm {
     pub chunk: Chunk,
     pub pc: u64,
     pub stack: Stack,
     pub strings: InternStr,
-    pub globals: HashMap<Rc<str>, Rc<RefCell<Value>>, BuildHasherDefault<AHasher>>
+    pub globals: HashMap<Rc<str>, Value, BuildHasherDefault<AHasher>>
 }
 
 impl Vm {
