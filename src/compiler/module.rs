@@ -54,7 +54,7 @@ impl Module {
             compiler: Some(compiler),
             imports: AHashMap::default(), funcs: Default::default(), globals: Default::default(),
             chunk: Some(Chunk::new()),
-            locals: vec![], scope_depth: 0, 
+            locals: Vec::with_capacity(0xFF), scope_depth: 0, 
         }
     }
 
@@ -200,41 +200,6 @@ impl Module {
        self.chunk.as_mut().unwrap().write_const(Const::Char(char));
        Type::Char
    }
-   fn variable(&mut self) -> Result<Type, PhoenixError> {
-       let name = self.curr_tok().lexeme.take().unwrap()[1..].to_owned();
-       let pos = self.curr_tok().pos;
-
-        if !self.globals.contains_key(&*name) { return Err(PhoenixError::Compile { id: CompErrID::MissingGlobalSymbol, row: pos.0, col: pos.1, msg: format!("Global symbol '{name}' not found") }) }
-
-        let ty = self.globals[&*name];
-
-        // If it's a setter (I.E. 'symbol [=, +=, -=, *=, /=]')
-        if ![Eq, PlusEq, MinusEq, StarEq, SlashEq].contains(&self.tokens[self.i + 1].ty) {
-            self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobGet);
-            let name_const = self.chunk.as_mut().unwrap().add_get_const(Const::String(name.into()));
-            self.chunk.as_mut().unwrap().write(&name_const.to_le_bytes()[..3]);
-            Ok(ty)
-        }
-        else {
-            let op_i = self.i + 1;
-            let is_eq = self.tokens[op_i].ty == Eq;
-            self.i += 2;
-            let name_const = self.chunk.as_mut().unwrap().add_get_const(Const::String(name.into()));
-
-            if !is_eq { self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobGet); self.chunk.as_mut().unwrap().write(&name_const.to_le_bytes()[..3]); }
-
-            let expr_pos = self.curr_tok().pos;
-            let expr_ty = self.expression_parsing(0)?;
-
-            if !is_eq { Self::operation(self.chunk.as_mut().unwrap(), Some((ty, pos)), (expr_ty, expr_pos), &self.tokens[op_i])?; }
-
-            if expr_ty != ty && is_eq { return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: expr_pos.0, col: expr_pos.1,
-                msg: format!("Cannot assign value of type '{expr_ty}' to symbol of type '{ty}'") }); }
-            self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobSet);
-            self.chunk.as_mut().unwrap().write(&name_const.to_le_bytes()[..3]);
-            Ok(Type::Void)
-        }
-   }
    fn block(&mut self, brace_row: Option<u16>) -> Result<Type, PhoenixError> {
        // begin scope
        self.scope_depth += 1;
@@ -272,7 +237,9 @@ impl Module {
 
        if self.tokens[self.i - 1].ty == SemiColon && block_ty != Type::Void { self.chunk.as_mut().unwrap().write_op(FBOpCode::OpPop); block_ty = Type::Void; }
 
+       // end scope
        self.scope_depth -= 1;
+       while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth { self.chunk.as_mut().unwrap().write_op(FBOpCode::OpPop); }
        Ok(block_ty)
    }
 

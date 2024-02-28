@@ -26,9 +26,9 @@ mod test {
     use clap::error::ErrorKind;
     use toml::Table;
 
-    use crate::{compiler::{scanner::Scanner, module::Module, Compiler}, debug::debug_chunk, error::PhoenixError, vm::{Vm, value::{Value, Pointer}, Stack}, strings::{InternStrSync, InternStr}, STACK_LENGTH};
+    use crate::{compiler::Compiler, debug::debug_chunk, error::PhoenixError, vm::{Vm, Stack}, strings::InternStr};
 
-    #[test]
+    //#[test]
     pub fn test() -> Result<(), Vec<PhoenixError>> {
         let chunk = Compiler::compile(PathBuf::from(r"/home/matteo/rust/phoenixlang/test/"))?;
         debug_chunk(&chunk);
@@ -38,10 +38,11 @@ mod test {
 
     //#[test]
     pub fn test_general() {
-        println!("{}", Pointer::Heap(Rc::new(Value::Bool(true))))
+        let a = Rc::new(1);
+        println!("{a:?}");
+        println!("{a}");
     }
 }
-
 
 pub fn execute(bytes: Vec<u8>) {
 

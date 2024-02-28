@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::str::FromStr;
 
+use crate::vm::value::Pointer;
 use crate::vm::{value, Stack};
 use crate::{op_codes, vm::{Vm, value::Value}, compiler::chunk::Const};
 
@@ -63,11 +64,12 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
         FBOpCode::OpPop => { vm.stack.pop(); }
         FBOpCode::OpAdd => {
             let second = vm.stack.pop();
-            let first = vm.stack.pop();
+            let first = vm.stack.pop().point(&vm);
+            let second = second.point(&vm);
             
-            match (first, second) {
-                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(int_f + int_s)),
-                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(dec_f + dec_s)),
+            match (&*first, &*second) {
+                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f + *int_s)),
+                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(*dec_f + *dec_s)),
                 (Value::Str(str), Value::Str(to_concat)) => {
                     let mut new_str = String::from(&*str); new_str.push_str(&*to_concat);
                     let v = vm.strings.intern_str(&*new_str);
@@ -83,31 +85,34 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
         }
         FBOpCode::OpSub => {
             let second = vm.stack.pop();
-            let first = vm.stack.pop();
+            let first = vm.stack.pop().point(&vm);
+            let second = second.point(&vm);
             
-            match (first, second) {
-                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(int_f - int_s)),
-                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(dec_f - dec_s)),
+            match (&*first, &*second) {
+                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f - *int_s)),
+                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(*dec_f - *dec_s)),
                 (_, _) => unreachable!()
             };
         }
         FBOpCode::OpMul => {
             let second = vm.stack.pop();
-            let first = vm.stack.pop();
+            let first = vm.stack.pop().point(&vm);
+            let second = second.point(&vm);
             
-            match (first, second) {
-                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(int_f * int_s)),
-                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(dec_f * dec_s)),
+            match (&*first, &*second) {
+                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f * *int_s)),
+                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(*dec_f * *dec_s)),
                 (_, _) => unreachable!()
             };
         }
         FBOpCode::OpDiv => {
             let second = vm.stack.pop();
-            let first = vm.stack.pop();
+            let first = vm.stack.pop().point(&vm);
+            let second = second.point(&vm);
             
-            match (first, second) {
-                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(int_f / int_s)),
-                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(dec_f / dec_s)),
+            match (&*first, &*second) {
+                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f / *int_s)),
+                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(*dec_f / *dec_s)),
                 (_, _) => unreachable!()
             };
         }
@@ -132,7 +137,7 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
             let name = &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize];
             let name = if let Const::String(str) = name { str } else { unreachable!() };
             let name = vm.strings.intern_str(name);
-            vm.stack.push(vm.globals[&name].clone());
+            vm.stack.push(Value::Ptr(Pointer::Global(name)));
         }
     }
     None
