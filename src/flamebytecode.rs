@@ -1,19 +1,20 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str::FromStr;
-
 use crate::vm::value::Pointer;
 use crate::vm::{value, Stack};
 use crate::{op_codes, vm::{Vm, value::Value}, compiler::chunk::Const};
 
 op_codes! {
+    #[derive(PartialEq, Eq)]
     pub enum FBOpCode {
         OpReturn = 0 => 1,
         OpConstant => 4, OpTrue => 1, OpFalse => 1,
         OpPop => 1,
         OpAdd => 1, OpSub => 1, OpMul => 1, OpDiv => 1, OpNeg => 1,
         OpPrint => 1,
-        OpGlobSet => 4, OpGlobGet => 4,
+        OpGlobSet => 4, OpGlobGet => 4, OpGlobClone => 4,
+        OpLocSet => 4, OpLocGet => 4, OpLocClone => 4,
     }
 }
 
@@ -24,7 +25,7 @@ pub fn debug(i: u64, slice: &[u8]) {
     match FBOpCode::from(slice[0]) {
         FBOpCode::OpReturn => oper!("OpReturn"),
         FBOpCode::OpConstant => {
-            let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a});
+            let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}); //u24
             oper!("OpConstant" "\t#{}", a);
         }
         FBOpCode::OpPop =>oper!("OpPop"), 
@@ -34,12 +35,28 @@ pub fn debug(i: u64, slice: &[u8]) {
         FBOpCode::OpNeg => oper!("OpNeg"),
         FBOpCode::OpPrint => oper!("OpPrint"),
         FBOpCode::OpGlobSet => {
-            let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a});
+            let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}); //u24
             oper!("OpGlobSet\t->" "\t#{}", a);
         }
         FBOpCode::OpGlobGet => {
-            let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a});
+            let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}); //u24
             oper!("OpGlobGet\t<-" "\t#{}", a);
+        } 
+        FBOpCode::OpGlobClone => {
+            let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}); //u24
+            oper!("OpGlobClone\t<~" "\t#{}", a);
+        } 
+        FBOpCode::OpLocSet => {
+            let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}); //u24
+            oper!("OpLocSet\t->" "\t#{}", a);
+        }
+        FBOpCode::OpLocGet => {
+            let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}); //u24
+            oper!("OpLocClone\t<-" "\t#{}", a);
+        } 
+        FBOpCode::OpLocClone => {
+            let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}); //u24
+            oper!("OpLocGet\t<~" "\t#{}", a);
         } 
     } 
 }
@@ -51,7 +68,7 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
     match FBOpCode::from(slice[0]) {
         FBOpCode::OpReturn => return Some(0),
         FBOpCode::OpConstant => {
-            let value = match &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize] {
+            let value = match &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize] { //u24
                 Const::Int(v) => Value::Int(*v),
                 Const::Dec(v) => Value::Dec(f64::from_bits(*v)),
                 Const::String(v) => {
@@ -64,19 +81,19 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
         FBOpCode::OpPop => { vm.stack.pop(); }
         FBOpCode::OpAdd => {
             let second = vm.stack.pop();
-            let first = vm.stack.pop().point(&vm);
-            let second = second.point(&vm);
+            let first = vm.stack.pop().depoint(&vm);
+            let second = second.depoint(&vm);
             
             match (&*first, &*second) {
                 (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f + *int_s)),
                 (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(*dec_f + *dec_s)),
                 (Value::Str(str), Value::Str(to_concat)) => {
-                    let mut new_str = String::from(&*str); new_str.push_str(&*to_concat);
+                    let mut new_str = String::from(&**str); new_str.push_str(&**to_concat);
                     let v = vm.strings.intern_str(&*new_str);
                     vm.stack.push(Value::Str(v));
                 }
                 (Value::Str(str), Value::Char(to_concat)) => {
-                    let mut new_str = String::from(&*str); new_str.push(to_concat);
+                    let mut new_str = String::from(&**str); new_str.push(*to_concat);
                     let v = vm.strings.intern_str(&*new_str);
                     vm.stack.push(Value::Str(v));
                 }
@@ -85,8 +102,8 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
         }
         FBOpCode::OpSub => {
             let second = vm.stack.pop();
-            let first = vm.stack.pop().point(&vm);
-            let second = second.point(&vm);
+            let first = vm.stack.pop().depoint(&vm);
+            let second = second.depoint(&vm);
             
             match (&*first, &*second) {
                 (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f - *int_s)),
@@ -96,8 +113,8 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
         }
         FBOpCode::OpMul => {
             let second = vm.stack.pop();
-            let first = vm.stack.pop().point(&vm);
-            let second = second.point(&vm);
+            let first = vm.stack.pop().depoint(&vm);
+            let second = second.depoint(&vm);
             
             match (&*first, &*second) {
                 (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f * *int_s)),
@@ -107,8 +124,8 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
         }
         FBOpCode::OpDiv => {
             let second = vm.stack.pop();
-            let first = vm.stack.pop().point(&vm);
-            let second = second.point(&vm);
+            let first = vm.stack.pop().depoint(&vm);
+            let second = second.depoint(&vm);
             
             match (&*first, &*second) {
                 (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f / *int_s)),
@@ -127,18 +144,33 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
         }
         FBOpCode::OpPrint => { print!("{}", vm.stack.pop()) }
         FBOpCode::OpGlobSet => {
-            let name = &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize];
+            let name = &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize]; //u24
             let name = if let Const::String(str) = name { str } else { unreachable!() };
             let name = vm.strings.intern_str(name);
             let value = vm.stack.pop();
             vm.globals.insert(name, value);
         }
-        FBOpCode::OpGlobGet => {
-            let name = &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize];
+        s @ (FBOpCode::OpGlobGet | FBOpCode::OpGlobClone) => {
+            let name = &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize]; //u24
             let name = if let Const::String(str) = name { str } else { unreachable!() };
             let name = vm.strings.intern_str(name);
-            vm.stack.push(Value::Ptr(Pointer::Global(name)));
+            let value = if s == FBOpCode::OpGlobGet {Value::Ptr(Pointer::Global(name))} else {vm.globals[&name].clone()};
+            vm.stack.push(value);
         }
+        FBOpCode::OpLocSet => {
+            let addr = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize; //u24
+            let value = vm.stack.pop().depoint(vm).into_owned();
+            vm.with_attached_val(addr, |val| *val = value);
+        }
+        FBOpCode::OpLocGet => {
+            let addr = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize; //u24
+            vm.stack.push(vm.denested_pointer(addr));
+        }
+        FBOpCode::OpLocClone =>{
+            let addr = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize; //u24
+            let value = vm.with_pointed_val(addr, |val| val.clone());
+            vm.stack.push(value);
+        } 
     }
     None
 }

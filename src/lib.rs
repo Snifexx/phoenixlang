@@ -20,13 +20,13 @@ const STACK_LENGTH: usize = 1;
 
 //#[cfg(test)]
 mod test {
-    use std::{rc::Rc, mem::{self, size_of}, collections::{HashSet, HashMap}, str::FromStr, path::PathBuf, fs};
+    use std::{rc::Rc, mem::{self, size_of}, collections::{HashSet, HashMap}, str::FromStr, path::PathBuf, fs, cell::RefCell};
 
 
     use clap::error::ErrorKind;
     use toml::Table;
 
-    use crate::{compiler::Compiler, debug::debug_chunk, error::PhoenixError, vm::{Vm, Stack}, strings::InternStr};
+    use crate::{compiler::Compiler, debug::debug_chunk, error::PhoenixError, vm::{Vm, Stack, value::{Value, Pointer}}, strings::InternStr};
 
     //#[test]
     pub fn test() -> Result<(), Vec<PhoenixError>> {
@@ -38,9 +38,8 @@ mod test {
 
     //#[test]
     pub fn test_general() {
-        let a = Rc::new(1);
-        println!("{a:?}");
-        println!("{a}");
+        let a = Rc::new(RefCell::new(1));
+        println!("{}", a.borrow());
     }
 }
 

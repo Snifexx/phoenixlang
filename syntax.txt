@@ -58,3 +58,11 @@ pub struct Test + Debug:
 fn Test::debug() -> str:
     self.state.str()
 
+
+let temp = 0
+
+fn main():
+    call(temp)
+
+fn call(var: int):
+    var = 1

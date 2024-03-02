@@ -239,7 +239,8 @@ impl Module {
 
        // end scope
        self.scope_depth -= 1;
-       while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth { self.chunk.as_mut().unwrap().write_op(FBOpCode::OpPop); }
+       while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth { self.chunk.as_mut().unwrap().write_op(FBOpCode::OpPop);
+       }
        Ok(block_ty)
    }
 

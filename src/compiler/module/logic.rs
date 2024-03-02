@@ -68,7 +68,7 @@ impl Module {
 
         let ty = self.globals[&*name];
 
-        // If it's a setter (I.E. 'symbol [=, +=, -=, *=, /=]')
+        // If it's not a setter (I.E. 'symbol [=, +=, -=, *=, /=]')
         if ![Eq, PlusEq, MinusEq, StarEq, SlashEq].contains(&self.tokens[self.i + 1].ty) {
             self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobGet);
             let name_const = self.chunk.as_mut().unwrap().add_get_const(Const::String(name.into()));
@@ -120,16 +120,16 @@ impl Module {
                 msg: format!("Expected value of type '{}' as specified, type '{}' was instead provided", req_ty.unwrap(), ty) }),
         };
 
-        let glob = { 
+        let name = { 
             let mut lock = self.compiler.as_mut().unwrap().lock().unwrap();
             lock.strings.intern_str(name)
         };
         
-        self.set_local(glob, ty);
+        self.set_symbol(name, ty);
         Ok(Type::Void)
     }
 
-    fn set_local(&mut self, name: Arc<str>, ty: Type) {
+    fn set_symbol(&mut self, name: Arc<str>, ty: Type) {
         if self.scope_depth == 0 {
             let i = self.chunk.as_mut().unwrap().add_get_const(Const::String((&*name).into()));
             self.globals.insert(name, ty);
@@ -139,9 +139,14 @@ impl Module {
         } else {
             let new_local = Local { name: name.clone(), depth: self.scope_depth };
 
-            if let Some(local) = self.locals.iter_mut().rev().filter(|x| x.depth >= self.scope_depth).find(|x| x.name == name) {
-                *local = new_local; } 
-            else { self.locals.push(new_local); }
+            if let Some(local) = self.locals.iter_mut().rev()
+                .filter(|x| x.depth >= self.scope_depth)
+                    .find(|x| x.name == name) { 
+                        *local = new_local;
+                        self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobSet);
+                        self.chunk.as_mut().unwrap().write(&self.i.to_le_bytes()[0..3]);
+                    } 
+            else { if self.locals.len() < 0xFFFFFF {self.locals.push(new_local)} else { panic!("scope local_limit reached") }; }
         }
     }
 }
