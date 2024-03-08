@@ -127,7 +127,6 @@ impl Module {
                 Self::operation(self.chunk.as_mut().unwrap(), None, (rhs, rht_pos), &self.tokens[tok_i])?
             }
             op @ (LBrace | IndentUp) => return self.block(if op == LBrace { Some(self.tokens[self.i].pos.1) } else { None }),
-            LineJoin => { self.i += 1; return self.expression_parsing(min_bp) }
             ty => return Err(PhoenixError::Compile { id: CompErrID::InvalidCharacter, row: self.curr_tok().pos.0, col: self.curr_tok().pos.1, 
                 msg: format!("Invalid character '{ty:?}' at the start of an expression") })
         };
@@ -135,9 +134,8 @@ impl Module {
 
         loop {
             let op_i = self.i;
-            if self.tokens[self.i - 1].ty != LineJoin && self.tokens[self.i - 1].pos.0 != self.curr_tok().pos.0 { break; }
+            if self.tokens[self.i - 1].pos.0 != self.curr_tok().pos.0 { break; }
             let op = match self.curr_tok().ty {
-                LineJoin => { self.i += 1; continue; }
                 SemiColon | RParen | Eof  => break,
                 op @ (Plus | Minus | Star | Slash) => &self.tokens[op_i], 
                 op => unreachable!("{op:?}"),
@@ -202,10 +200,11 @@ impl Module {
    }
    fn block(&mut self, brace_row: Option<u16>) -> Result<Type, PhoenixError> {
        // begin scope
+       self.i += 1;
        self.scope_depth += 1;
        let mut block_ty = Type::Void;
 
-       while [Eof, RBrace, IndentDown].contains(&self.curr_tok().ty) {
+       while ![Eof, RBrace, IndentDown].contains(&self.curr_tok().ty) {
            if block_ty != Type::Void { self.chunk.as_mut().unwrap().write_op(FBOpCode::OpPop) }
 
            if self.tokens[self.i].lexeme.as_ref().is_some_and(|str| &str[1..] == "print") { //TODO temporary print
@@ -234,13 +233,13 @@ impl Module {
                    msg: format!("Cannot terminate multiline block with '}}'") })
            } _ => {}
        }
+       self.i += 1;
 
        if self.tokens[self.i - 1].ty == SemiColon && block_ty != Type::Void { self.chunk.as_mut().unwrap().write_op(FBOpCode::OpPop); block_ty = Type::Void; }
 
        // end scope
        self.scope_depth -= 1;
-       while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth { self.chunk.as_mut().unwrap().write_op(FBOpCode::OpPop);
-       }
+       while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth { self.locals.pop(); self.chunk.as_mut().unwrap().write_op(FBOpCode::OpPop); }
        Ok(block_ty)
    }
 

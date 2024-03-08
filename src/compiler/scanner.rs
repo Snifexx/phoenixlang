@@ -65,7 +65,6 @@ impl Scanner {
 
             match c {
                 '\n' => {
-                    if res.last().unwrap().ty == LineJoin { continue; }
                     let mut spaces = 0;
                     while self.peek.is_some_and(|x| x == ' ') { spaces += 1; next_break!() }
                     let new_indent = spaces / 4; 
@@ -128,7 +127,6 @@ impl Scanner {
                 '"' => self.string(&mut res)?,
                 '\'' => self.char(&mut res)?,
                 '`' => res.push(Token::make(&self, Backtick, None)),
-                '\\' => res.push(Token::make(&self, LineJoin, None)),
                 c if c.is_ascii_digit() => self.number(&mut res, c),
                 c if c.is_ascii_alphabetic() || c == '_' => self.identifier(&mut res, c, &keywords)?,
                 _ => return Err(PhoenixError::Compile { id: CompErrID::InvalidCharacter, row: self.row, col: self.col, msg: format!("Invalid character {c} at {}::{}", self.row, self.col) })

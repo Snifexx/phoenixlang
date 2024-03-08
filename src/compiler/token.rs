@@ -24,7 +24,7 @@ pub enum TokenType {
 
     Ampersand, Caret, Bar, Pipe,
     Hash, Dollar, Tilde, Backtick,
-    IndentUp, IndentDown, LineJoin,
+    IndentUp, IndentDown, 
 
     Bang, BangEq,
     Eq, EqEq, ArrowEq,

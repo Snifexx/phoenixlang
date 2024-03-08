@@ -16,7 +16,7 @@ mod utils;
 pub mod error;
 
 const IDENTIFIER_MAX_LENGTH: usize = 32;
-const STACK_LENGTH: usize = 1;
+const STACK_LENGTH: usize = 512;
 
 //#[cfg(test)]
 mod test {
