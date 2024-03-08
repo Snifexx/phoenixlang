@@ -28,7 +28,7 @@ mod test {
 
     use crate::{compiler::Compiler, debug::debug_chunk, error::PhoenixError, vm::{Vm, Stack, value::{Value, Pointer}}, strings::InternStr};
 
-    //#[test]
+    #[test]
     pub fn test() -> Result<(), Vec<PhoenixError>> {
         let chunk = Compiler::compile(PathBuf::from(r"/home/matteo/rust/phoenixlang/test/"))?;
         debug_chunk(&chunk);

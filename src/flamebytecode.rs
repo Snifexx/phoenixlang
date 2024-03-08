@@ -1,4 +1,6 @@
+use std::borrow::{Cow, Borrow};
 use std::cell::RefCell;
+use std::mem;
 use std::rc::Rc;
 use std::str::FromStr;
 use crate::vm::value::Pointer;
@@ -80,97 +82,119 @@ pub fn run(vm: &mut Vm, size: usize) -> Option<u8> {
         FBOpCode::OpTrue => vm.stack.push(Value::Bool(true)), FBOpCode::OpFalse => vm.stack.push(Value::Bool(false)),
         FBOpCode::OpPop => { vm.stack.pop(); }
         FBOpCode::OpAdd => {
-            let second = vm.stack.pop();
-            let first = vm.stack.pop().depoint(&vm);
-            let second = second.depoint(&vm);
-            
-            match (&*first, &*second) {
-                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f + *int_s)),
-                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(*dec_f + *dec_s)),
-                (Value::Str(str), Value::Str(to_concat)) => {
-                    let mut new_str = String::from(&**str); new_str.push_str(&**to_concat);
-                    let v = vm.strings.intern_str(&*new_str);
-                    vm.stack.push(Value::Str(v));
+            let val = {
+                let second = vm.stack.pop();
+                let first = vm.stack.pop().depoint(vm); let first = first.deupvalue(vm);
+                let second = second.depoint(vm); let second = second.deupvalue(vm);
+
+                match (&**first, &**second) {
+                    (Value::Int(int_f), Value::Int(int_s)) => Value::Int(*int_f + *int_s),
+                    (Value::Dec(dec_f), Value::Dec(dec_s)) => Value::Dec(*dec_f + *dec_s),
+                    (Value::Str(str), Value::Str(to_concat)) => {
+                        let mut new_str = String::from(&**str); new_str.push_str(&**to_concat);
+                        drop(first); drop(second);
+                        let v = vm.strings.intern_str(&*new_str);
+                        Value::Str(v)
+                    }
+                    (Value::Str(str), Value::Char(to_concat)) => {
+                        let mut new_str = String::from(&**str); new_str.push(*to_concat);
+                        drop(first); drop(second);
+                        let v = vm.strings.intern_str(&*new_str);
+                        Value::Str(v)
+                    }
+                    (_, _) => unreachable!()
                 }
-                (Value::Str(str), Value::Char(to_concat)) => {
-                    let mut new_str = String::from(&**str); new_str.push(*to_concat);
-                    let v = vm.strings.intern_str(&*new_str);
-                    vm.stack.push(Value::Str(v));
-                }
-                (_, _) => unreachable!()
             };
+            vm.stack.push(val);
         }
         FBOpCode::OpSub => {
-            let second = vm.stack.pop();
-            let first = vm.stack.pop().depoint(&vm);
-            let second = second.depoint(&vm);
-            
-            match (&*first, &*second) {
-                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f - *int_s)),
-                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(*dec_f - *dec_s)),
-                (_, _) => unreachable!()
+            let val = {
+                let second = vm.stack.pop();
+                let first = vm.stack.pop().depoint(vm); let first = first.deupvalue(vm);
+                let second = second.depoint(vm); let second = second.deupvalue(vm);
+
+                match (&**first, &**second) {
+                    (Value::Int(int_f), Value::Int(int_s)) => Value::Int(*int_f - *int_s),
+                    (Value::Dec(dec_f), Value::Dec(dec_s)) => Value::Dec(*dec_f - *dec_s),
+                    (_, _) => unreachable!()
+                }
             };
+            vm.stack.push(val);
         }
         FBOpCode::OpMul => {
-            let second = vm.stack.pop();
-            let first = vm.stack.pop().depoint(&vm);
-            let second = second.depoint(&vm);
-            
-            match (&*first, &*second) {
-                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f * *int_s)),
-                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(*dec_f * *dec_s)),
-                (_, _) => unreachable!()
+            let val = {
+                let second = vm.stack.pop();
+                let first = vm.stack.pop().depoint(vm); let first = first.deupvalue(vm);
+                let second = second.depoint(vm); let second = second.deupvalue(vm);
+
+                match (&**first, &**second) {
+                    (Value::Int(int_f), Value::Int(int_s)) => Value::Int(*int_f * *int_s),
+                    (Value::Dec(dec_f), Value::Dec(dec_s)) => Value::Dec(*dec_f * *dec_s),
+                    (_, _) => unreachable!()
+                }
             };
+            vm.stack.push(val);
         }
         FBOpCode::OpDiv => {
-            let second = vm.stack.pop();
-            let first = vm.stack.pop().depoint(&vm);
-            let second = second.depoint(&vm);
-            
-            match (&*first, &*second) {
-                (Value::Int(int_f), Value::Int(int_s)) => vm.stack.push(Value::Int(*int_f / *int_s)),
-                (Value::Dec(dec_f), Value::Dec(dec_s)) => vm.stack.push(Value::Dec(*dec_f / *dec_s)),
-                (_, _) => unreachable!()
+            let val = {
+                let second = vm.stack.pop();
+                let first = vm.stack.pop().depoint(vm); let first = first.deupvalue(vm);
+                let second = second.depoint(vm); let second = second.deupvalue(vm);
+
+                match (&**first, &**second) {
+                    (Value::Int(int_f), Value::Int(int_s)) => Value::Int(*int_f / *int_s),
+                    (Value::Dec(dec_f), Value::Dec(dec_s)) => Value::Dec(*dec_f / *dec_s),
+                    (_, _) => unreachable!()
+                }
             };
+            vm.stack.push(val);
         }
         FBOpCode::OpNeg => {
-            let value = vm.stack.pop();
+            let val = {
+                let value = vm.stack.pop().depoint(vm); let value = value.deupvalue(vm);
 
-            match value {
-                Value::Int(value) => vm.stack.push(Value::Int(-value)),
-                Value::Dec(value) => vm.stack.push(Value::Dec(-value)),
-                _ => unreachable!(),
-            }
+                match &**value {
+                    Value::Int(value) => Value::Int(-*value),
+                    Value::Dec(value) => Value::Dec(-*value),
+                    _ => unreachable!(),
+                }
+            };
+            vm.stack.push(val);
         }
-        FBOpCode::OpPrint => { print!("{}", vm.stack.pop()) }
+        FBOpCode::OpPrint => { print!("{}", &**vm.stack.pop().depoint(vm).deupvalue(vm)) }
         FBOpCode::OpGlobSet => {
             let name = &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize]; //u24
             let name = if let Const::String(str) = name { str } else { unreachable!() };
             let name = vm.strings.intern_str(name);
-            let value = vm.stack.pop();
-            vm.globals.insert(name, value);
+            let value = vm.stack.pop().depoint(vm).deupvalue(vm).to_owned();
+
+            match vm.globals.get_mut(&name) {
+                Some(Value::Upv(rc)) => *rc.borrow_mut() = value,
+                Some(glob) => *glob = value,
+                None => { vm.globals.insert(name, value); }
+            };
         }
         s @ (FBOpCode::OpGlobGet | FBOpCode::OpGlobClone) => {
             let name = &vm.chunk.consts.as_vm()[u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize]; //u24
-            let name = if let Const::String(str) = name { str } else { unreachable!() };
-            let name = vm.strings.intern_str(name);
-            let value = if s == FBOpCode::OpGlobGet {Value::Ptr(Pointer::Global(name))} else {vm.globals[&name].clone()};
+            let name = if let Const::String(str) = name { str } else { unreachable!() }; let name = vm.strings.intern_str(name);
+
+            let value = if s == FBOpCode::OpGlobGet {Value::Ptr(Pointer::Global(name))} else {vm.globals[&name].deupvalue(vm).clone()};
             vm.stack.push(value);
         }
         FBOpCode::OpLocSet => {
             let addr = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize; //u24
-            let value = vm.stack.pop().depoint(vm).into_owned();
-            vm.with_attached_val(addr, |val| *val = value);
+            let value = vm.stack.pop().depoint(vm).deupvalue(vm).to_owned();
+
+            match &mut vm.stack[addr] {
+                Value::Upv(rc) => *rc.borrow_mut() = value,
+                _ => vm.with_depnt_upved(addr, |mut val| **val = value)
+            };
         }
-        FBOpCode::OpLocGet => {
+        s @ (FBOpCode::OpLocGet | FBOpCode::OpLocClone) => {
             let addr = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize; //u24
-            vm.stack.push(vm.denested_pointer(addr));
-        }
-        FBOpCode::OpLocClone =>{
-            let addr = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}) as usize; //u24
-            let value = vm.with_pointed_val(addr, |val| val.clone());
+            let value = if s == FBOpCode::OpLocGet {vm.denested_pointer(addr)} else {vm.with_depnt_upved(addr, |val| val.clone())};
             vm.stack.push(value);
-        } 
+        }
     }
     None
 }

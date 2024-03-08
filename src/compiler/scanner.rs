@@ -75,6 +75,7 @@ impl Scanner {
                         if res.last().is_some_and(|x| x.ty == tok[!tok_i as usize]) { res.pop(); }
                         else { res.push(Token::make(&self, tok[tok_i as usize], None)) }
                     });
+                    self.indent = new_indent;
                     continue;
                 }
                 i if i.is_ascii_whitespace() => continue,
