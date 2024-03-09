@@ -70,9 +70,16 @@ impl Module {
 
         // If it's not a setter (I.E. 'symbol [=, +=, -=, *=, /=]')
         if ![Eq, PlusEq, MinusEq, StarEq, SlashEq].contains(&self.tokens[self.i + 1].ty) {
-            self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobGet);
-            let name_const = self.chunk.as_mut().unwrap().add_get_const(Const::String(name.into()));
-            self.chunk.as_mut().unwrap().write(&name_const.to_le_bytes()[..3]);
+            if self.scope_depth == 0 {
+                self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobGet);
+                let name_const = self.chunk.as_mut().unwrap().add_get_const(Const::String(name.into()));
+                self.chunk.as_mut().unwrap().write(&name_const.to_le_bytes()[..3]);
+            } else if let Some(addr) = self.locals.iter().enumerate().rev()
+                .find(|(pos, loc)| { &*loc.name == name }).map(|(addr, _)| addr) {
+                    self.chunk.as_mut().unwrap().write_op(FBOpCode::OpLocGet);
+                    self.chunk.as_mut().unwrap().write(&addr.to_le_bytes()[..3]);
+                } else { return Err(PhoenixError::Compile { id: CompErrID::UnknownSymbol, row: pos.0, col: pos.1,
+                    msg: format!("Unknown global or local symbol '{name}'") }) }
             Ok(ty)
         }
         else {
@@ -137,16 +144,16 @@ impl Module {
             self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobSet);
             self.chunk.as_mut().unwrap().write(&i.to_le_bytes()[0..3]);
         } else {
-            let new_local = Local { name: name.clone(), depth: self.scope_depth };
+            let new_local = Local { name: name.clone(), depth: self.scope_depth, ty };
 
             if let Some(local) = self.locals.iter_mut().rev()
                 .filter(|x| x.depth >= self.scope_depth)
                     .find(|x| x.name == name) { 
                         *local = new_local;
-                        self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobSet);
+                        self.chunk.as_mut().unwrap().write_op(FBOpCode::OpLocSet);
                         self.chunk.as_mut().unwrap().write(&self.i.to_le_bytes()[0..3]);
                     } 
-            else { if self.locals.len() < 0xFFFFFF {self.locals.push(new_local)} else { panic!("scope local_limit reached") }; }
+            else { if self.locals.len() < 0xFFFFFF { self.locals.push(new_local); } else { panic!("scope local_limit reached") }; }
         }
     }
 }

@@ -54,11 +54,11 @@ pub fn debug(i: u64, slice: &[u8]) {
         }
         FBOpCode::OpLocGet => {
             let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}); //u24
-            oper!("OpLocClone\t<-" "\t#{}", a);
+            oper!("OpLocGet\t<-" "\t#{}", a);
         } 
         FBOpCode::OpLocClone => {
             let a = u32::from_le_bytes({let mut a = [0; 4]; a[0..3].copy_from_slice(&slice[1..]); a}); //u24
-            oper!("OpLocGet\t<~" "\t#{}", a);
+            oper!("OpLocClone\t<~" "\t#{}", a);
         } 
     } 
 }

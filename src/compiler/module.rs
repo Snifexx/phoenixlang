@@ -45,7 +45,7 @@ struct Funcs {
     dependencies: HashSet<Arc<String>, BuildHasherDefault<AHasher>>,
 }
 
-struct Local { name: Arc<str>, depth: u8 }
+struct Local { name: Arc<str>, depth: u8, ty: Type }
 
 impl Module {
     pub fn new(tokens: Vec<Token>, id: Arc<str>, compiler: Arc<Mutex<Compiler>>) -> Self { 

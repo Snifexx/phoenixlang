@@ -30,6 +30,6 @@ pub enum CompErrID {
     InvalidCharacter, UnterminatedComment, UnterminatedString, UnterminatedChar, InvalidCharLiteral,
     IdentifierTooLong, 
     // Compiler errors
-    TypeError, InvalidSymbol,
+    TypeError, InvalidSymbol, UnknownSymbol,
     MissingGlobalSymbol,
 }
