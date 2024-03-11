@@ -104,7 +104,7 @@ impl Module {
             Int => self.int(),
             Dec => self.dec(), 
             String => self.string(),
-            Identifier => { let ty = self.variable()?; if Type::Void == ty { return Ok(ty); } else { ty } }
+            Identifier => { let ty = self.identifier()?; if Type::Void == ty { return Ok(ty); } else { ty } }
             Plus => {
                 self.i += 1;
                 let ret_ty = self.expression_parsing(9)?;
