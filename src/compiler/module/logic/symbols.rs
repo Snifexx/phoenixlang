@@ -17,14 +17,16 @@ impl Module {
         let pos = self.curr_tok().pos;
 
         if [Eq, PlusEq, MinusEq, StarEq, SlashEq].contains(&self.tokens[self.i + 1].ty) {
-            self.assignment(name, pos) } else { self.get_symbol(name, pos) }
+            self.assignment(name, pos)?; Ok(Type::Void) } else { self.get_symbol(name, pos) }
     }
     
 
     pub fn _let(&mut self) -> Result<Type, PhoenixError> {
         self.i += 1;
+        if self.curr_tok().ty != TokenType::Identifier { return Err(PhoenixError::Compile { id: CompErrID::InvalidSymbol, row: self.curr_tok().pos.0, col: self.curr_tok().pos.1,
+        msg: format!("Variable name must be a symbol") }) }
         let name = &self.tokens[self.i].lexeme.take().ok_or_else(|| PhoenixError::Compile { id: CompErrID::InvalidSymbol, row: self.curr_tok().pos.0, col: self.curr_tok().pos.1, 
-            msg: format!("No symbol name was provided") })?[1..];
+            msg: format!("No variable name was provided") })?[1..];
         let pos = self.curr_tok().pos;
 
         self.i += 1;
@@ -54,7 +56,7 @@ impl Module {
         Ok(Type::Void)
     }
 
-    pub fn assignment(&mut self, name: &str, pos: (u16, u16)) -> Result<(), PhoenixError> {
+    fn assignment(&mut self, name: &str, pos: (u16, u16)) -> Result<(), PhoenixError> {
         self.i += 1;
         let lht = self.resolve_symbol(name).map(|either| match either { Either::Left((_, local)) => local.ty , Either::Right(ty) => ty })
             .ok_or_else(|| PhoenixError::Compile { id: CompErrID::UnknownSymbol, row: pos.0, col: pos.1,
@@ -62,23 +64,23 @@ impl Module {
 
         let op = match self.curr_tok().ty {
             Eq => None,
-            PlusEq | MinusEq | StarEq | SlashEq => { self.get_symbol(name, pos); Some(&self.tokens[self.i]) }
+            PlusEq | MinusEq | StarEq | SlashEq => { self.get_symbol(name, pos); Some(self.tokens[self.i].clone()) }
             _ => unreachable!()
         };
         self.i += 1;
 
-        let rht_pos = self.curr_tok().pos;
+        let rht_pos = self.tokens[self.i].pos;
         let rht = self.expression_parsing(0)?;
 
         let expr_ty = match op {
-            Some(op) => Self::operation(self.chunk.as_mut().unwrap(), Some((lht, pos)), (rht, rht_pos), op)?,
+            Some(op) => Self::operation(self.chunk.as_mut().unwrap(), Some((lht, pos)), (rht, rht_pos), &op)?,
             None => rht,
         };
 
         if lht != expr_ty { return Err(PhoenixError::Compile { id: CompErrID::TypeError, row: rht_pos.0, col: rht_pos.1,
             msg: format!("Cannot assign expression of type '{expr_ty}' to symbol '{name}' of type '{lht}'") }) }
 
-        self.set_symbol(name, pos, ty, declare_absent)
+        self.set_symbol(name, pos, Type::Void, false);
         Ok(())
     }
 
@@ -88,9 +90,10 @@ impl Module {
 
         match symbol {
             Either::Left((addr, loc)) => {
+                let ty = loc.ty; drop(loc);
                 self.chunk.as_mut().unwrap().write_op(FBOpCode::OpLocGet);
                 self.chunk.as_mut().unwrap().write(&addr.to_le_bytes()[..3]);
-                Ok(loc.ty)
+                Ok(ty)
             }
             Either::Right(ty) => {
                 self.chunk.as_mut().unwrap().write_op(FBOpCode::OpGlobGet);
@@ -126,7 +129,7 @@ impl Module {
         Ok(())
     }
 
-    fn resolve_symbol(&mut self, name: &str) -> Option<Either<(usize, &Local), Type>> {
+    fn resolve_symbol(&self, name: &str) -> Option<Either<(usize, &Local), Type>> {
         if let Some((addr, loc)) = self.locals.iter().enumerate().rev()
             .filter(|(_, loc)| loc.depth <= self.scope_depth)
                 .find(|(addr, loc)| &*loc.name == name) {

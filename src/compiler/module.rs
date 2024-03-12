@@ -27,7 +27,7 @@ type AHashMap<K, V> = HashMap<K, V, BuildHasherDefault<AHasher>>;
 pub struct Module {
     id: Arc<str>,
     tokens: Vec<Token>, i: usize,
-    // Temp, will have a locals for each func, not for curr chunk
+    // TODO Temp, will have a locals for each func, not for curr chunk
     locals: Vec<Local>, scope_depth: u8,
 
     imports: AHashMap<Arc<str>, Arc<String>>,
@@ -104,7 +104,7 @@ impl Module {
             Int => self.int(),
             Dec => self.dec(), 
             String => self.string(),
-            Identifier => { let ty = self.identifier()?; if Type::Void == ty { return Ok(ty); } else { ty } }
+            Identifier => { let ty = self.variable()?; if Type::Void == ty { return Ok(ty); } else { ty } }
             Plus => {
                 self.i += 1;
                 let ret_ty = self.expression_parsing(9)?;

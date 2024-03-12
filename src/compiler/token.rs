@@ -5,7 +5,7 @@ use TokenType::*;
 
 use crate::compiler::scanner::Scanner;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub ty: TokenType,
     pub lexeme: Option<Box<str>>,
